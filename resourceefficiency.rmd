@@ -302,17 +302,48 @@ print(lambda)
 ```{r}
 #Define relative 'value' (or whatever the basis for allocation is) over the goods produced in each process
 lam2<-matrix(0,ncol=nproc,nrow=nprod)
-lam2[,1]<-c( 50*2,    0,     0,40*1.2,    0, 5,  0,  0, 0)
-lam2[,2]<-c(    0, 20*2,     0,     0,5*0.5, 0,  0, 10, 0)
-lam2[,3]<-c(    0,    0,12.5*2,     0,    0, 0,  0,  0, 2)
-lam2<-t(t(lam2)/colSums(lam2))
-lam2t<-t(t(lam2)*colSums(V*diag(3)))
+# Main products 'double value' per unit of N
+lam2[1,1]<-P[1,1]*2
+lam2[2,2]<-P[2,2]*2
+lam2[3,3]<-P[3,3]*2
+# Exported products 'normal value
+lam2[4,1]<-P[4,1]*1
+lam2[5,2]<-P[5,2]*1
+# Recycled products half value
+lam2[6,1]<-P[6,1]*0.5
+lam2[8,2]<-P[8,2]*0.5
+lam2[9,3]<-P[9,3]*0.5
 
+#lam2[,1]<-c( 50*2,    0,     0,40*1.2,    0,10*0,  0,    0,   0)
+#lam2[,2]<-c(    0, 20*2,     0,     0,5*0.5,   0,  0, 10*0,   0)
+#lam2[,3]<-c(    0,    0,12.5*2,     0,    0,   0,  0,    0, 2*0)
+lam2r<-t(t(lam2)/colSums(lam2))
+lam2t<-t(t(lam2r)*colSums(V*diag(3)))
+lamratio<-colSums(lam2)/colSums(V*diag(3))
+
+# Add consumption for chain flows acc to allocation data
 newV<-sapply(1:nproc,function(j) sapply(1:nprod,function(i) if(chainflows[i]&j==target[i]){-lam2t[i,origin[i]]}else{P[i,j]}))
+
 newV<-t(sapply(1:nproc,function(x) apply(newV[1:nprod,][origin==x,],2,sum)))
+
 neweintensity<-t(e)%*%ginv(newV)
 newrintensity<-1+neweintensity
+View(lam2r)
 neweintensity
+newrintensity
+1/newrintensity
+
+
+New approach
+lam3<-matrix(0,ncol=nproc,nrow=nproc)
+# Let emissions flow back; don't use matrix approach because there is no 'flow of emissions' 
+# But assign embodied emissions in recycled biomass back to the stage it is used
+lam3[1,]<-c(lam2r[1,1],lam2r[8,2],lam2r[9,3])
+lam3[2,]<-c(lam2r[1,1],lam2r[2,2]+lam2r[8,2],lam2r[9,3])
+lam3[3,]<-c(lam2r[1,1],lam2r[2,2]+lam2r[8,2],lam2r[3,3]+lam2r[9,3])
+feintensity<-lam3%*%e
+ffootprints<-feintensity/colSums(P[1:3,1:3]*diag(3))
+
 ```
 
 # Distribution of emissions according to allocation factors
