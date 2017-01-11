@@ -113,10 +113,12 @@ flowanalysis<-function(P,nrod,recycling,goods,resources){
     goodstemp[goodstemp>0]<-0
     suminputs<--apply(goodstemp[rownames(P)%in%goods,],2,sum)
     suminputs<-suminputs-P[rownames(P)%in%resources,]
+    sumresources<-P[rownames(P)%in%resources,]
+    sumlosses<-P[rownames(P)%in%losses,]
     nue<-sumgoods/suminputs
     
     
-    return(list(chainflows,origin,target,exportflows,sumgoods,suminputs,nue))
+    return(list(chainflows,origin,target,exportflows,sumlosses,sumresources,nue))
 }
 
 
@@ -169,6 +171,76 @@ allocationbyvalue1<-function(nproc,nprod){
     
     return(list(lam2,lam3))
     
+}
+
+calcburden<-function(P,nproc,nprod,lambda,lambdamain,chainflows,target){
+    
+    # Burden must be total losses!
+    # Distribute the direct burden (total losses) of each process 
+    # over the products of the process including those that are recycled
+    rburd<-which(interventions%in%losses)+nprod
+    rreso<-which(interventions%in%resources)+nprod
+    dirburden<-sapply(1:nproc,function(j) 
+        sapply(1:(nprod),function(i)-lambda[i,j]*as.vector(P[rburd,j])))
+    
+    # Resources must be calculated as N in product + N in losses
+    # Calculate the resources each product requires to match
+    # the equation: Resources = Products + Losses
+    # Note - in the example there is no stock changes so far,
+    #        equations would need to be adapted as stock changes 
+    #        are resources but count as goods without burden
+    A<-P[1:nprod,]
+    dirresour<-dirburden
+    lcells<-dirresour<0
+    dirresour[lcells]<-A[lcells]-dirburden[lcells]
+    
+    # Calculate the embedded burden in recycling flows
+    # This formula calculates how much burden of a chainflow needs 
+    # to be added to the target process
+    recburden<-colSums(sapply(1:nproc,function(x) rowSums(dirburden*chainflows*(target==x))))
+    
+    # The embedded burden is distributed ...
+    embburden<-sapply(1:nproc,function(j) 
+        sapply(1:(nprod),function(i) lambda[i,j]*recburden[j]))
+    
+    # ... and added to the direct burden
+    # This yields the burden for each process
+    # Through recycling the burden of processes that receive recycling flows
+    # is increased and those recycling is decreased
+    burdenprocesses<-dirburden+embburden
+    burdenprocesses[chainflows,]<-0
+    
+    # Finally the burden is carried along the chain through
+    # the 'connecting' flows
+    # The embedded burden from previous processes is distributed
+    # amongst the exported goods and the flows to successive processes
+    
+    # Attention! this is programmed only for a three-process system
+    # Need generalization !!
+    burdenproducts<-burdenprocesses
+    burdenproducts[,1]<-burdenprocesses[,1]
+    burdenproducts[,2]<-burdenprocesses[,2]+burdenproducts[1,1]*lambdamain[,2]
+    burdenproducts[,3]<-burdenprocesses[,3]+burdenproducts[2,2]*lambdamain[,3]
+    burdenproducts[1,1]<-0
+    burdenproducts[2,2]<-0
+    
+    # Resources must be calculated as N in product + N in losses
+    resourcesproducts<-burdenproducts
+    lcells<-round(burdenproducts,5)<0
+    resourcesproducts[lcells]<-A[lcells]-burdenproducts[lcells]
+    finproducts<-A
+    finproducts[!lcells]<-0
+    
+    
+    # Nutrient Use Efficiency
+    nueproducts<-finproducts/resourcesproducts
+    
+    # Footprints
+    lossfactors<--burdenproducts/finproducts
+    
+    return(list(dirburden,recburden,embburden,
+                burdenproducts,resourcesproducts,finproducts,nueproducts,
+                lossfactors))
 }
 
 

@@ -139,8 +139,8 @@ chainflows<-flowanaly[[1]]
 origin<-flowanaly[[2]]
 target<-flowanaly[[3]]
 exportflows<-flowanaly[[4]]
-sumgoods<-flowanaly[[5]]
-suminputs<-flowanaly[[6]]
+sumlosses<-flowanaly[[5]]
+sumresources<-flowanaly[[6]]
 nue<-flowanaly[[7]]
 ```
 ## Nitrogen Use Efficiency for each process
@@ -188,9 +188,10 @@ print(r)
 print(rintensity)
 print(lcanue)
 ```
-# Defining Allocation factors
 
-## Allocation by share of nutrient flow from 'goods'
+# Distribution of emissions according to allocation factors
+
+## Allocation by share of nutrient flow from 'goods' or 'value
 ```{r}
 lambda<-allocationbyflow(P,goods,origin)
 lambda<-allocationbyvalue1(nproc,nprod)
@@ -199,93 +200,27 @@ lambda<-lambda[[1]]
 print(lambda)
 ```
 
-## Steps to account for allocation in the matrix-approach
 
-1. Multiply each good with its allocation factor
-2. The inputs from other processec receive the values of the respective out flows
-3. Generate new 'V' vector. The diagonal is the total of net goods per process (same as before). The non-diagonal cells contain the flows between processes. The sum of the rows gives the amount of goods exported (thus total produced minus recycled back or forwarded to following processes).
-4. Apply formula as before.
+## Steps to account for allocation 
 
-```{r}
-lambda<-allocationbyvalue1(nproc,nprod)
-lambda[1,]+colSums(lambda*(target==1&origin!=1))
-lam4<-matrix(0,ncol=nproc,nrow=nproc)
-lam4[1:nproc,1:nproc]<-1*diag(3)
-for(i in 1:nproc){
-    sv<-(nproc+1):nprod
-    #chainlambda<-sapply(1:nproc,function(x) Reduce("*",colSums(lambda[1:nproc,1:nproc])[1:x]))
-    lam4[i,]<-lam4[i,]+colSums(lambda[sv,]*(target[sv]==i&origin[sv]!=i))
-    print(i)
-    print(lam4)
-    if(i>1)lam4[i,]<-lam4[i,]+lam4[i-1,]
-    lam4[i,]<-lam4[i,]*lambda[i,i]
-    print(lam4[i,])
-    print(lam4)
-}
+1. Distribute the burden over the final products considering embedded
+   burdens in recyling flows
+2. The resource use (inputs) are calculated accordingly according to 
+   the general equation: Resources = Products + Losses
+3. *Nutrient Use Efficiency* for each product is then calculated according to the standard equation: NUE = Products/Resources
+4. *Nutrient Loss Factors* are obtained from: fNLOSS=Losses/Products,
+whereby both Losses and Products shall be in the unit of N
 
-
-dirburden<-sapply(1:nproc,function(j) sapply(1:(nprod),function(i) -lambda[i,j]*as.vector(P[nprod+2,j])))
-
-# Calculate the embedded burden in recycling flows
-# This formula calculates how much burden of a chainflow needs to be added to the target process
-recburden<-colSums(sapply(1:nproc,function(x) rowSums(dirburden*chainflows*(target==x))))
-
-embburden<-sapply(1:nproc,function(j) sapply(1:(nprod),function(i) lambda[i,j]*recburden[j]))
-
-totburden<-dirburden+embburden
-totburden[chainflows,]<-0
-
-totburden2<-totburden
-totburden2[,1]<-totburden[,1]
-totburden2[,2]<-totburden[,2]+totburden2[1,1]*lambdamain[,2]
-totburden2[,3]<-totburden[,3]+totburden2[2,2]*lambdamain[,3]
-totburden2[1,1]<-0
-totburden2[2,2]<-0
-
-#New approach
-lam3<-matrix(0,ncol=nproc,nrow=nproc)
-# Let emissions flow back; don't use matrix approach because there is no 'flow of emissions' 
-# But assign embodied emissions in recycled biomass back to the stage it is used
-lam3[1,]<-c(lam2r[1,1],lam2r[8,2],lam2r[9,3])
-lam3[2,]<-c(lam2r[1,1],lam2r[2,2]+lam2r[8,2],lam2r[9,3])
-lam3[3,]<-c(lam2r[1,1],lam2r[2,2]+lam2r[8,2],lam2r[3,3]+lam2r[9,3])
-#feintensity<-lam3%*%e
-#ffootprints<-feintensity/colSums(P[1:3,1:3]*diag(3))
-
+```{r,echo=FALSE}
+burden<-calcburden(P,nproc,nprod,lambda,lambdamain,chainflows,target)
+#Retrieve only final product-burden
+burdenproducts<-burden[[4]]
+resourcesproducts<-burden[[5]]
+finproducts<-burden[[6]]
+nueproducts<-burden[[7]]
+lossfactors<-burden[[8]]
 ```
 
-# Distribution of emissions according to allocation factors
-
-One flow-matrix is generated per environmental flow, both resources and losses.
-
-```{r}
-envflows<-lapply(1:nenv,function(x) sapply(1:nproc,function(j) sapply(1:(nprod+1),function(i) (if(i>nprod){1}else{-lambda[i,j]})*as.vector(P[nprod+x,j]))))
-
-e<-as.vector(as.matrix(P[11,]))
-eintensity<-t(e)%*%ginv(V)
-rintensity<-t(r)%*%ginv(V)
-rintensity2<-t(r)%*%ginv(t(V))
-print(eintensity)
-print(rintensity)
-
-# For Footprint calculation only the core matrix is needed
-# giving the main flows connecting the total food production system
-corematrix<-P[1:nproc,1:nproc]*diag(3)
-
-burden<-t(as.matrix(P[(nprod+1):(nprod+nenv),]))
-# Vectorize the allocation factors [for the burden in question if differentiated]...
-corealloc<-apply(lambda[1:nproc,1:nproc],1,sum,na.rm=T)
-#... and calculate the product of factors along the chain
-# The result is a vector indicating which share of a flow from each process ends up in the final product
-# This is in this example simple because the system is linear
-corealloc<-sapply(1:nproc,function(x) Reduce("*",corealloc[x:nproc]))
-# The footprint by process gives the total burden that is to be allocated to the final demanded products, differentiation by the process that generates it.
-footprintbyprocess<-burden*corealloc #/sum(f)
-#
-footprints<-apply(footprintbyprocess,2,sum)
-
-
-```
 
 
 # Results
