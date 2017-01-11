@@ -7,23 +7,34 @@ output: html_document
 
 Script calculating resource efficiency according to Heijungs and Suh (2002).
 
+```{r,echo=FALSE}
+source("resourceefficiency.r")
+doheader()
+supplychain<-supplychainsimple()
+processes<-supplychain[[1]]
+nproc<-supplychain[[2]]
+products<-supplychain[[3]]
+nprod<-supplychain[[4]]
+resources<-supplychain[[5]]
+losses<-supplychain[[6]]
+nenv<-supplychain[[7]]
+recycling<-supplychain[[8]]
+
+waste<-c()
+goods<-products[!products%in% waste]
+interventions<-c(resources,losses)
+```
+
+
 # Problem definition
 ## Processes
 We assess a three-process life cycle:
 
-
-```{r}
-library("Matrix")                       # Matrix calculations
-library("MASS")                         # Inverted matrix
-
-processes<-c("Feed production",
-             "Livestock production",
-             "Food production")
+```{r, echo=FALSE}
+for(i in 1:nproc) cat(i,processes[i],"\n")
 ```
 
- 
 All flows are expressed in kg of nitrogen.
- 
 
 ### Feed production
 
@@ -43,74 +54,43 @@ All flows are expressed in kg of nitrogen.
 
 ## Economic flows
 The following economic flows are differentiated:
-
-1. Feed product #We start with the principal food-chain
-2. Animal product
-3. Food product 
-4. Feed co-product
-5. Animal co-product
-6. Crop residues production #Finally residues
-7. Crop residues consumption
-8. Recycled Manure
-9. Recycled Food processing by-product
-
-```{r}
-products<-c("feed","anim","food","feedco","animco","cropreso","cropresi","manure","foodres")
-
-#flagging co-products that are recycled
-recycling<-rep(0,length(products))
-recycling[6:9]<-1
+```{r,echo=FALSE}
+for(i in 1:9) cat(i,products[i],"\n")
 ```
 
 In the default desing of the system, all residues are recycled in the system and none is wasted.
 
-```{r}
-waste<-c()
-goods<-products[!products%in% waste]
-print(goods)
+```{r, echo=FALSE}
+if(length(waste)>0)for(i in 1:length(goods)) cat(i,goods[i],"\n")
 ```
-
 
 ## Environmental flows
 We regard all environmental losses here independently of their nature.
 Therefore, there is only one environmental flow:
 
-9. Mineral fertilizer #After principal chain (other) inputs and co-products
-10. Total N losses
-
-```{r}
-resources<-c("N fertilizer")
-losses<-c("N losses")
-interventions<-c(resources,losses)
+```{r,echo=FALSE}
+for(i in 1:length(interventions)) cat(i,interventions[i],"\n")
 
 ```
-
 
 # Data input
 ## Process vectors
 
 The *Technology matrix _A_* gives the economic flows.
-It has `r length(products)` rows and 'r length(processes)` columns.
+It has `r length(products)` rows and `r length(processes)` columns.
 
 The *Intervention matrix _B_* gives the environmental flows.
 
 The *Process matrix _P_* is the combination of A and B.Each column represents one *process vector* made from the technology vector t_i and the intervention vector i_i
 
 ```{r}
-t1<-c( 50,  0,   0,40,0,10,-10,-10,-2)
-# The vector is constructed such that consumption of recyling flows from other processes are not explicit to leave cross-dependencies flexible.
-# They are indicated with NA.
-# Required resources are coming from the resources (here mineral fertilizer)
-# This does NOT affect the calculated NUE per process or the lifecycle NUE based on material flow analysis.
-t1<-c( 50,  0,   0,40,0,10,-10, NA,NA)
-t1<-c( 25,  0,   0,20,0, 5, -5, NA,NA)
-t2<-c(-50, 20,   0, 0,5, 0,  0, 10, 0)
-t3<-c(  0,-20,12.5, 0,0, 0,  0,  0, 2)
-i1<-c(-100,22)
-i1<-c(-112,22)
-i1<-c(-56,11)
-i2<-c(   0,15)
-i3<-c(   0,5.5)
+egsupply<-exampleaimable(nproc,nprod,nenv)
+supplymat<-processmatrix(egsupply,supplychain)
+
+A<-supplymat[[1]]
+B<-supplymat[[2]]
+P<-supplymat[[3]]
+f<-egsupply[[3]]
 ```
 
 
@@ -119,68 +99,22 @@ Allocation factors - if used - are required for all products which are produced 
 
 For wastes == 0, for goods > 0.
 
-
-```{r}
-```
-
 ## Demand vector
 There is demand only for food. Therefore, all for all ecnomic flows, which are not completely re-absorbed in the process, an additional process must be defined which consumes the product.
 
-```{r}
-f<-c(0,0,12.5) #Demand Vector required for main food chain
-```
 
 # Calculations
-## Functions
-```{r}
-# Calculation requires a square Technology matrix
-# Fill missing columns on the basis of existing data
-
-#Matrix of flows which are 'too many' (not part of the main food chain)
-Afull<-function(A){
-    n<-ncol(A)
-    m<-nrow(A)
-    grows2add<-m-n
-    g<-matrix(rep(0,ncol=(m-n)*(m-n)),ncol=(m-n),nrow=(m-n))
-    gtemp<-matrix(rep(0,ncol=(m-n)*n),ncol=(m-n),nrow=n)
-    fsum<-apply(A,1,sum)[(n+1):m]
-    for(i in 1:length(fsum)){g[i,i]<--fsum[i]}
-    g<-rbind(gtemp,g)
-    g<-cbind(A,g)
-    return(g)
-    }
-fplus<-function(A,f){
-    g<-c(f,rep(0,nrow(A)-ncol(A)))
-    return(g)
-    }
-```
 
 ## Scaling vector
-```{r}
-# Combine process vectors into Technology matrix, Intervention matrix, and the Process matrix 
-A<-cbind(t1,t2,t3)
-A<-as.data.frame(A)
-rownames(A)<-products
-colnames(A)<-processes
-B<-cbind(i1,i2,i3)
-B<-as.data.frame(B)
-rownames(B)<-interventions
-colnames(B)<-processes
-P<-rbind(A,B)
-colnames(P)<-processes
-
-nprod<-nrow(A)
-nproc<-ncol(A)
-nenv<-nrow(B)
-
-# For the scaling factor only the main matrix counts
-# Co-products or recycling doesn't change the relative quantitive of the processes required
-# So far only P is scaled !
-s<-as.vector(ginv(as.matrix(A[1:ncol(A),]))%*%f)
-P[,]<-sapply(1:ncol(P),function(j) sapply(1:nrow(P),function(i) P[i,j]*s[j]))
+The scaling vector is obtained by multiplying the inverse of the technology matrix with the demand vector f
+```{r,echo=FALSE}
+scaling<-scaling(A,f)
+s<-scaling[[1]]
+P<-scaling[[2]]
+print("Scaling factors:")
+for(i in 1:nproc) cat("Process:",i," (",processes[i],") - ",s[i],"\n")
+cat("Demand vector:\n",f,"\n")
 ```
-
-
 
 ## Fill recycling flows
 Assumptions:
@@ -190,51 +124,36 @@ Assumptions:
 3. The system draws on exactly ONE resource.If thereare more than one resource, then there must be rules how to account for accounting, but this has not been programmed yet.
 
 ```{r}
-fillrec<-function(recycling,P,nproc,nprod){
-  temp<-apply(P[1:nprod,]*recycling,1,sum,na.rm=T)
-  temp<-sapply(1:nproc,function(j) 
-    sapply(1:nprod,function(i) 
-      if(is.na(A[i,j])){-temp[i]}else{P[i,j]}))
-  tempdiff<-as.vector(apply(temp,2,sum))-as.vector(apply(P[1:nrow(A),],2,sum,na.rm=T))
-  
-}
-P[1:nprod,]<-temp
-P[nprod+length(resources),]<-P[nprod+length(resources),]-tempdiff
+P<-fillrecycling(recycling,P,nproc,nprod)
+print(P)
 
-rm(temp,tempdiff)
 ```
 
 ## Analysis of type of flows
 
 - *Chainflows* are those which are produced in one process and consumed in another process
 
-```{r}
-chainflows<-sapply(1:nprod,function(x) if(round(sum(P[x,]),5)==0){which(P[x,]>0)!=which(P[x,]<0)}else{FALSE})
-#flagging flows from the process they are generated (0 for imports)
-origin<-sapply(1:nprod,function(x) if(length(which(P[x,]>0))){which(P[x,]>0)}else{which(P[x,]<0)})
-target<-sapply(1:nprod,function(x) if(length(which(P[x,]<0))){which(P[x,]<0)}else{0})
-target[which(target==0&recycling==1)]<-origin[which(target==0&recycling==1)]
-exportflows<-target==0
+```{r,echo=FALSE}
+flowanaly<-flowanalysis(P,nprod,recycling,goods,resources)
+chainflows<-flowanaly[[1]]
+origin<-flowanaly[[2]]
+target<-flowanaly[[3]]
+exportflows<-flowanaly[[4]]
+sumgoods<-flowanaly[[5]]
+suminputs<-flowanaly[[6]]
+nue<-flowanaly[[7]]
 ```
-
-
-
 ## Nitrogen Use Efficiency for each process
 NUE is calculated from the ratio of goods produced in a process to the sum of inputs. Here, NUE is calculated as a characteristicum of the process itself, thus no differentiation is made between different goods.
 
-```{r}
-goodsproducts<-P[rownames(P)%in%goods,]
-goodsproducts[goodsproducts<0]<-0
-sumgoods<-apply(goodsproducts[rownames(P)%in%goods,],2,sum)
-goodstemp<-P[rownames(P)%in%goods,]
-goodstemp[goodstemp>0]<-0
-suminputs<--apply(goodstemp[rownames(P)%in%goods,],2,sum)
-suminputs<-suminputs-P[rownames(P)%in%resources,]
-nue<-sumgoods/suminputs
-rm(goodstemp)
+```{r,echo=FALSE}
+cat("Sum of inputs per process\n")
+print(suminputs)
+cat("Sum of goods produced per process\n")
+print(sumgoods)
+cat("NUE per process\n")
+print(nue)
 ```
-
-
 ## Resource use per process
 Total resource use is the sum of all inputs (goods and resources) which are not recycled in the process.
 
@@ -252,43 +171,31 @@ s: Stock change [considered as good]
 
 This is achieved by filtering for each product the flows originating from the corresponding process and summing by process:
 
-
-```{r}
-V<-matrix(rep(0,nproc**2),ncol=nproc,nrow=nproc)
-V<-t(sapply(1:nproc,function(x) apply(P[1:nprod,][origin==x,],2,sum)))
-print(V)
-```
-
 The inverse of this matrix is multiplied with the resource vector
-
-```{r}
-r<-as.vector(as.matrix(-P[rownames(P)%in%resources,]))
-```
 
 Finally, the resource-need vector for the processes is obtained according to equation (4) in Suh et a., (2011)
 
-```{r}
-rintensity<-t(r)%*%ginv(V)
-```
-
 According to Uwizeye et al. (2016), the life-cycle NUE is obtained as inverse of the resource-intensity of the last process
 
-```{r}
-lcanue<-1/rintensity[1,length(processes)]
+```{r,echo=FALSE}
+nutflow<-nutflowanalysi(P,nproc,nprod,origin,resources)
+V<-nutflow[[1]]
+r<-nutflow[[2]]
+rintensity<-nutflow[[3]]
+lcanue<-nutflow[[4]]
+print(V)
+print(r)
+print(rintensity)
+print(lcanue)
 ```
-
 # Defining Allocation factors
 
 ## Allocation by share of nutrient flow from 'goods'
 ```{r}
-
-#Re-scale factors so that their sum is 1
-# -- note that for multiplication of columns by vector the number of rows must be the length of the vector
-goodsproducts<-P[rownames(P)%in%goods,]
-goodsproducts<-sapply(1:ncol(goodsproducts),function(x) goodsproducts[,x]*(origin==x))
-
-lambda<-t(t(goodsproducts)/apply(goodsproducts,2,sum))
-lambda<-t(t(goodsproducts))
+lambda<-allocationbyflow(P,goods,origin)
+lambda<-allocationbyvalue1(nproc,nprod)
+lambdamain<-lambda[[2]]
+lambda<-lambda[[1]]
 print(lambda)
 ```
 
@@ -300,49 +207,50 @@ print(lambda)
 4. Apply formula as before.
 
 ```{r}
-#Define relative 'value' (or whatever the basis for allocation is) over the goods produced in each process
-lam2<-matrix(0,ncol=nproc,nrow=nprod)
-# Main products 'double value' per unit of N
-lam2[1,1]<-P[1,1]*2
-lam2[2,2]<-P[2,2]*2
-lam2[3,3]<-P[3,3]*2
-# Exported products 'normal value
-lam2[4,1]<-P[4,1]*1
-lam2[5,2]<-P[5,2]*1
-# Recycled products half value
-lam2[6,1]<-P[6,1]*0.5
-lam2[8,2]<-P[8,2]*0.5
-lam2[9,3]<-P[9,3]*0.5
-
-#lam2[,1]<-c( 50*2,    0,     0,40*1.2,    0,10*0,  0,    0,   0)
-#lam2[,2]<-c(    0, 20*2,     0,     0,5*0.5,   0,  0, 10*0,   0)
-#lam2[,3]<-c(    0,    0,12.5*2,     0,    0,   0,  0,    0, 2*0)
-lam2r<-t(t(lam2)/colSums(lam2))
-lam2t<-t(t(lam2r)*colSums(V*diag(3)))
-lamratio<-colSums(lam2)/colSums(V*diag(3))
-
-# Add consumption for chain flows acc to allocation data
-newV<-sapply(1:nproc,function(j) sapply(1:nprod,function(i) if(chainflows[i]&j==target[i]){-lam2t[i,origin[i]]}else{P[i,j]}))
-
-newV<-t(sapply(1:nproc,function(x) apply(newV[1:nprod,][origin==x,],2,sum)))
-
-neweintensity<-t(e)%*%ginv(newV)
-newrintensity<-1+neweintensity
-View(lam2r)
-neweintensity
-newrintensity
-1/newrintensity
+lambda<-allocationbyvalue1(nproc,nprod)
+lambda[1,]+colSums(lambda*(target==1&origin!=1))
+lam4<-matrix(0,ncol=nproc,nrow=nproc)
+lam4[1:nproc,1:nproc]<-1*diag(3)
+for(i in 1:nproc){
+    sv<-(nproc+1):nprod
+    #chainlambda<-sapply(1:nproc,function(x) Reduce("*",colSums(lambda[1:nproc,1:nproc])[1:x]))
+    lam4[i,]<-lam4[i,]+colSums(lambda[sv,]*(target[sv]==i&origin[sv]!=i))
+    print(i)
+    print(lam4)
+    if(i>1)lam4[i,]<-lam4[i,]+lam4[i-1,]
+    lam4[i,]<-lam4[i,]*lambda[i,i]
+    print(lam4[i,])
+    print(lam4)
+}
 
 
-New approach
+dirburden<-sapply(1:nproc,function(j) sapply(1:(nprod),function(i) -lambda[i,j]*as.vector(P[nprod+2,j])))
+
+# Calculate the embedded burden in recycling flows
+# This formula calculates how much burden of a chainflow needs to be added to the target process
+recburden<-colSums(sapply(1:nproc,function(x) rowSums(dirburden*chainflows*(target==x))))
+
+embburden<-sapply(1:nproc,function(j) sapply(1:(nprod),function(i) lambda[i,j]*recburden[j]))
+
+totburden<-dirburden+embburden
+totburden[chainflows,]<-0
+
+totburden2<-totburden
+totburden2[,1]<-totburden[,1]
+totburden2[,2]<-totburden[,2]+totburden2[1,1]*lambdamain[,2]
+totburden2[,3]<-totburden[,3]+totburden2[2,2]*lambdamain[,3]
+totburden2[1,1]<-0
+totburden2[2,2]<-0
+
+#New approach
 lam3<-matrix(0,ncol=nproc,nrow=nproc)
 # Let emissions flow back; don't use matrix approach because there is no 'flow of emissions' 
 # But assign embodied emissions in recycled biomass back to the stage it is used
 lam3[1,]<-c(lam2r[1,1],lam2r[8,2],lam2r[9,3])
 lam3[2,]<-c(lam2r[1,1],lam2r[2,2]+lam2r[8,2],lam2r[9,3])
 lam3[3,]<-c(lam2r[1,1],lam2r[2,2]+lam2r[8,2],lam2r[3,3]+lam2r[9,3])
-feintensity<-lam3%*%e
-ffootprints<-feintensity/colSums(P[1:3,1:3]*diag(3))
+#feintensity<-lam3%*%e
+#ffootprints<-feintensity/colSums(P[1:3,1:3]*diag(3))
 
 ```
 
