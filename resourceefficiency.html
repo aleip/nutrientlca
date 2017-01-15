@@ -223,114 +223,40 @@ print(P)</code></pre>
 <pre><code>## [1] 0.36425</code></pre>
 </div>
 </div>
-<div id="defining-allocation-factors" class="section level1">
-<h1>Defining Allocation factors</h1>
-<div id="allocation-by-share-of-nutrient-flow-from-goods" class="section level2">
-<h2>Allocation by share of nutrient flow from ‘goods’</h2>
-<pre class="r"><code>#Re-scale factors so that their sum is 1
-# -- note that for multiplication of columns by vector the number of rows must be the length of the vector
-goodsproducts&lt;-P[rownames(P)%in%goods,]
-goodsproducts&lt;-sapply(1:ncol(goodsproducts),function(x) goodsproducts[,x]*(origin==x))
-
-lambda&lt;-t(t(goodsproducts)/apply(goodsproducts,2,sum))
-lambda&lt;-t(t(goodsproducts))
-print(lambda)</code></pre>
-<pre><code>##       [,1] [,2] [,3]
-##  [1,]   50    0  0.0
-##  [2,]    0   20  0.0
-##  [3,]    0    0 12.5
-##  [4,]   40    0  0.0
-##  [5,]    0    5  0.0
-##  [6,]   10    0  0.0
-##  [7,]  -10    0  0.0
-##  [8,]    0   10  0.0
-##  [9,]    0    0  2.0</code></pre>
-</div>
-<div id="steps-to-account-for-allocation-in-the-matrix-approach" class="section level2">
-<h2>Steps to account for allocation in the matrix-approach</h2>
-<ol style="list-style-type: decimal">
-<li>Multiply each good with its allocation factor</li>
-<li>The inputs from other processec receive the values of the respective out flows</li>
-<li>Generate new ‘V’ vector. The diagonal is the total of net goods per process (same as before). The non-diagonal cells contain the flows between processes. The sum of the rows gives the amount of goods exported (thus total produced minus recycled back or forwarded to following processes).</li>
-<li>Apply formula as before.</li>
-</ol>
-<pre class="r"><code>#Define relative 'value' (or whatever the basis for allocation is) over the goods produced in each process
-lam2&lt;-matrix(0,ncol=nproc,nrow=nprod)
-# Main products 'double value' per unit of N
-lam2[1,1]&lt;-P[1,1]*2
-lam2[2,2]&lt;-P[2,2]*2
-lam2[3,3]&lt;-P[3,3]*2
-# Exported products 'normal value
-lam2[4,1]&lt;-P[4,1]*1
-lam2[5,2]&lt;-P[5,2]*1
-# Recycled products half value
-lam2[6,1]&lt;-P[6,1]*0.5
-lam2[8,2]&lt;-P[8,2]*0.5
-lam2[9,3]&lt;-P[9,3]*0.5
-
-#lam2[,1]&lt;-c( 50*2,    0,     0,40*1.2,    0,10*0,  0,    0,   0)
-#lam2[,2]&lt;-c(    0, 20*2,     0,     0,5*0.5,   0,  0, 10*0,   0)
-#lam2[,3]&lt;-c(    0,    0,12.5*2,     0,    0,   0,  0,    0, 2*0)
-lam2r&lt;-t(t(lam2)/colSums(lam2))
-lam2t&lt;-t(t(lam2r)*colSums(V*diag(3)))
-lamratio&lt;-colSums(lam2)/colSums(V*diag(3))
-
-# Add consumption for chain flows acc to allocation data
-newV&lt;-sapply(1:nproc,function(j) sapply(1:nprod,function(i) if(chainflows[i]&amp;j==target[i]){-lam2t[i,origin[i]]}else{P[i,j]}))
-
-newV&lt;-t(sapply(1:nproc,function(x) apply(newV[1:nprod,][origin==x,],2,sum)))
-
-#neweintensity&lt;-t(e)%*%ginv(newV)
-#newrintensity&lt;-1+neweintensity
-#View(lam2r)
-#neweintensity
-#newrintensity
-#1/newrintensity
-
-#New approach
-lam3&lt;-matrix(0,ncol=nproc,nrow=nproc)
-# Let emissions flow back; don't use matrix approach because there is no 'flow of emissions' 
-# But assign embodied emissions in recycled biomass back to the stage it is used
-lam3[1,]&lt;-c(lam2r[1,1],lam2r[8,2],lam2r[9,3])
-lam3[2,]&lt;-c(lam2r[1,1],lam2r[2,2]+lam2r[8,2],lam2r[9,3])
-lam3[3,]&lt;-c(lam2r[1,1],lam2r[2,2]+lam2r[8,2],lam2r[3,3]+lam2r[9,3])
-#feintensity&lt;-lam3%*%e
-#ffootprints&lt;-feintensity/colSums(P[1:3,1:3]*diag(3))</code></pre>
-</div>
-</div>
 <div id="distribution-of-emissions-according-to-allocation-factors" class="section level1">
 <h1>Distribution of emissions according to allocation factors</h1>
-<p>One flow-matrix is generated per environmental flow, both resources and losses.</p>
-<pre class="r"><code>envflows&lt;-lapply(1:nenv,function(x) sapply(1:nproc,function(j) sapply(1:(nprod+1),function(i) (if(i&gt;nprod){1}else{-lambda[i,j]})*as.vector(P[nprod+x,j]))))
-
-e&lt;-as.vector(as.matrix(P[11,]))
-eintensity&lt;-t(e)%*%ginv(V)
-rintensity&lt;-t(r)%*%ginv(V)
-rintensity2&lt;-t(r)%*%ginv(t(V))
-print(eintensity)</code></pre>
-<pre><code>##           [,1]      [,2]     [,3]
-## [1,] 0.3932739 0.9903912 1.745367</code></pre>
-<pre class="r"><code>print(rintensity)</code></pre>
-<pre><code>##          [,1]     [,2]     [,3]
-## [1,] 1.393274 1.990391 2.745367</code></pre>
-<pre class="r"><code># For Footprint calculation only the core matrix is needed
-# giving the main flows connecting the total food production system
-corematrix&lt;-P[1:nproc,1:nproc]*diag(3)
-
-burden&lt;-t(as.matrix(P[(nprod+1):(nprod+nenv),]))
-# Vectorize the allocation factors [for the burden in question if differentiated]...
-corealloc&lt;-apply(lambda[1:nproc,1:nproc],1,sum,na.rm=T)
-#... and calculate the product of factors along the chain
-# The result is a vector indicating which share of a flow from each process ends up in the final product
-# This is in this example simple because the system is linear
-corealloc&lt;-sapply(1:nproc,function(x) Reduce(&quot;*&quot;,corealloc[x:nproc]))
-# The footprint by process gives the total burden that is to be allocated to the final demanded products, differentiation by the process that generates it.
-footprintbyprocess&lt;-burden*corealloc #/sum(f)
-#
-footprints&lt;-apply(footprintbyprocess,2,sum)</code></pre>
+<div id="allocation-by-share-of-nutrient-flow-from-goods-or-value" class="section level2">
+<h2>Allocation by share of nutrient flow from ‘goods’ or ’value</h2>
+<pre class="r"><code>lambda&lt;-allocationbyflow(P,goods,origin,chainflows,recycling)
+lambda&lt;-allocationbyvalue1(nproc,nprod)
+lambdamain&lt;-lambda[[2]]
+lambda&lt;-lambda[[1]]
+print(lambda)</code></pre>
+<pre><code>##            [,1] [,2]       [,3]
+##  [1,] 0.7142857  0.0 0.00000000
+##  [2,] 0.0000000  0.8 0.00000000
+##  [3,] 0.0000000  0.0 0.96153846
+##  [4,] 0.2857143  0.0 0.00000000
+##  [5,] 0.0000000  0.1 0.00000000
+##  [6,] 0.0000000  0.0 0.00000000
+##  [7,] 0.0000000  0.0 0.00000000
+##  [8,] 0.0000000  0.1 0.00000000
+##  [9,] 0.0000000  0.0 0.03846154</code></pre>
+</div>
+<div id="steps-to-account-for-allocation" class="section level2">
+<h2>Steps to account for allocation</h2>
+<ol style="list-style-type: decimal">
+<li>Distribute the burden over the final products considering embedded burdens in recyling flows</li>
+<li>The resource use (inputs) are calculated accordingly according to the general equation: Resources = Products + Losses</li>
+<li><em>Nutrient Use Efficiency</em> for each product is then calculated according to the standard equation: NUE = Products/Resources</li>
+<li><em>Nutrient Loss Factors</em> are obtained from: fNLOSS=Losses/Products, whereby both Losses and Products shall be in the unit of N</li>
+</ol>
+</div>
 </div>
 <div id="results" class="section level1">
 <h1>Results</h1>
+<div id="material-flow-analysis-approach" class="section level2">
+<h2>Material Flow Analysis approach</h2>
 <p>Final Process matrix P:</p>
 <pre><code>##              Feed production Livestock production Food production
 ## feed                      50                  -50             0.0
@@ -359,6 +285,86 @@ footprints&lt;-apply(footprintbyprocess,2,sum)</code></pre>
 <li>Food production: 2.745</li>
 </ul>
 <p>Full-life cycle NUE is thus: 36.4%.</p>
+</div>
+<div id="allocation-approach" class="section level2">
+<h2>Allocation approach</h2>
+<p>The allocation approach distributes the burden over all final products:</p>
+<pre><code>##        Feed production
+## feedco       -6.774725
+## 
+##        Livestock production
+## animco            -3.381868
+## 
+##      Food production
+## food       -32.34341</code></pre>
+<p>With the sum of the burden -42.5 being the same as the original total burden.</p>
+<p>The resource use is according to the equation:</p>
+<p>Input = Product + Losses</p>
+<p>as follows:</p>
+<pre><code>##        Feed production
+## feedco        46.77473
+## 
+##        Livestock production
+## animco             8.381868
+## 
+##      Food production
+## food        44.84341</code></pre>
+<p>Again, with the sum of the resources 100 being the same as the original total resource.</p>
+<p>The Nutrient Use Efficiency calculates according to:</p>
+<p>NUE = Products / Resources:</p>
+<pre><code>##        Feed production
+## feedco       0.8551627
+## 
+##        Livestock production
+## animco            0.5965257
+## 
+##      Food production
+## food       0.2787478</code></pre>
+<p>The LCA-NUE of the final demanded product is therefore 0.2787478</p>
+</div>
+</div>
+<div id="examples" class="section level1">
+<h1>Examples</h1>
+<div id="default-example" class="section level2">
+<h2>Default example</h2>
+<pre class="r"><code>supplychain&lt;-supplychainsimple()
+egsupply&lt;-exampleaimable(nproc,nprod,nenv)
+mfa&lt;-materialflow(supplychain,eggsupply)
+
+lambda&lt;-allocationbyvalue1(nproc,nprod)
+lcaap&lt;-lcaapproach(P,nproc,nprod,lambda,chainflows,target)
+lambda&lt;-lcaap[[1]]
+burden&lt;-lcaap[[2]]
+lca&lt;-lcaap[[3]]
+print(comparison(mfa,lca))</code></pre>
+<pre><code>## The nutrient use efficiency of the final demanded products is  0.36425  on the basis of the MFA approach, and  0.2787478  if calculated with allocation.NULL</code></pre>
+<pre class="r"><code>supplychain&lt;-supplychainsimple()
+egsupply&lt;-exampleaimable(nproc,nprod,nenv)
+mfa&lt;-materialflow(supplychain,eggsupply)
+
+lambda&lt;-allocationbyflow(P,goods,origin,chainflows,recycling)
+lcaap&lt;-lcaapproach(P,nproc,nprod,lambda,chainflows,target)
+lambda&lt;-lcaap[[1]]
+burden&lt;-lcaap[[2]]
+lca&lt;-lcaap[[3]]
+print(comparison(mfa,lca))</code></pre>
+<pre><code>## The nutrient use efficiency of the final demanded products is  0.36425  on the basis of the MFA approach, and  0.2787478  if calculated with allocation.NULL</code></pre>
+<p>Explanation for the LCA approach.</p>
+<p>The LCA approach takes builds on two principles</p>
+<ol style="list-style-type: decimal">
+<li>The Nutrient Use Efficiency is inherently linked to the nutrient balance: N-input = N-in-goods + N-losses.</li>
+<li></li>
+</ol>
+<p>In this example ther is an eternal N-input of 100 kg N per ‘cycle’. All of this is added to the first process (Feed production). Feed processing has two goods that leave the process: feed that goes to process 2 (50 kg) and exported crop/feed of 40 kg. Thus 71% of burden (total N losses) is assigned to feed and 29%. Thus the 22 kg of losses are distributed accordingly. The second process generates three goods that are leaving the process: livestock product that is processed in process 3, exported livestock product (co-product) and a co-product that is recycled as fertilizer in process 1. The burden of 15 kg is distrubuted according to the flow strength of N. Process 3 generates the final product and recycles a small amount of N as fertilizer.</p>
+<pre><code>##                Process Product       Value
+## 1      Feed production    feed -12.2222222
+## 2      Feed production  feedco  -9.7777778
+## 3 Livestock production    anim  -8.5714286
+## 4 Livestock production  animco  -2.1428571
+## 5 Livestock production  manure  -4.2857143
+## 6      Food production    food  -4.7413793
+## 7      Food production foodres  -0.7586207</code></pre>
+</div>
 </div>
 <div id="discussion" class="section level1">
 <h1>Discussion</h1>

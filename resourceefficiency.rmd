@@ -18,7 +18,7 @@ nprod<-supplychain[[4]]
 resources<-supplychain[[5]]
 losses<-supplychain[[6]]
 nenv<-supplychain[[7]]
-recycling<-supplychain[[8]]
+recycled<-supplychain[[8]]
 
 waste<-c()
 goods<-products[!products%in% waste]
@@ -124,7 +124,7 @@ Assumptions:
 3. The system draws on exactly ONE resource.If thereare more than one resource, then there must be rules how to account for accounting, but this has not been programmed yet.
 
 ```{r}
-P<-fillrecycling(recycling,P,nproc,nprod)
+P<-fillrecycling(recycled,P,nproc,nprod,origin,target)
 print(P)
 
 ```
@@ -134,14 +134,16 @@ print(P)
 - *Chainflows* are those which are produced in one process and consumed in another process
 
 ```{r,echo=FALSE}
-flowanaly<-flowanalysis(P,nprod,recycling,goods,resources)
+flowanaly<-flowanalysis(P,nprod,recycled,goods,resources)
 chainflows<-flowanaly[[1]]
 origin<-flowanaly[[2]]
 target<-flowanaly[[3]]
-exportflows<-flowanaly[[4]]
-sumlosses<-flowanaly[[5]]
-sumresources<-flowanaly[[6]]
-nue<-flowanaly[[7]]
+suminputs<-flowanaly[[4]]
+sumgoods<-flowanaly[[5]]
+exportflows<-flowanaly[[6]]
+sumlosses<-flowanaly[[7]]
+sumresources<-flowanaly[[8]]
+nue<-flowanaly[[9]]
 ```
 ## Nitrogen Use Efficiency for each process
 NUE is calculated from the ratio of goods produced in a process to the sum of inputs. Here, NUE is calculated as a characteristicum of the process itself, thus no differentiation is made between different goods.
@@ -193,7 +195,7 @@ print(lcanue)
 
 ## Allocation by share of nutrient flow from 'goods' or 'value
 ```{r}
-lambda<-allocationbyflow(P,goods,origin)
+lambda<-allocationbyflow(P,goods,origin,chainflows,recycl)
 lambda<-allocationbyvalue1(nproc,nprod)
 lambdamain<-lambda[[2]]
 lambda<-lambda[[1]]
@@ -219,11 +221,13 @@ resourcesproducts<-burden[[5]]
 finproducts<-burden[[6]]
 nueproducts<-burden[[7]]
 lossfactors<-burden[[8]]
+nfinprod<-burden[[9]]
+cfinprod<-burden[[10]]
 ```
 
-
-
 # Results
+
+## Material Flow Analysis approach
 Final Process matrix P: 
 ```{r, echo=FALSE}
 print(P)
@@ -248,6 +252,88 @@ Resource intensities:
 - `r processes[3]`: `r round(rintensity[3],3)`
 
 Full-life cycle NUE is thus: `r round(100*lcanue,1)`%.
+
+## Allocation approach
+The allocation approach distributes the burden over all final products:
+```{r,echo=FALSE}
+for(i in 1:nfinprod){
+    print(burdenproducts[cfinprod[i,1],cfinprod[i,2],drop=FALSE])
+    cat("\n")
+}
+```
+With the sum of the burden `r sum(burdenproducts)` being the same as the original total burden.
+
+The resource use is according to the equation:
+
+Input = Product + Losses
+
+as follows:
+
+```{r,echo=FALSE}
+for(i in 1:nfinprod){
+    print(resourcesproducts[cfinprod[i,1],cfinprod[i,2],drop=FALSE])
+    cat("\n")
+}
+
+```
+Again, with the sum of the resources `r sum(resourcesproducts)` being the same as the original total resource.
+
+The Nutrient Use Efficiency calculates according to:
+
+NUE = Products / Resources:
+```{r,echo=FALSE}
+for(i in 1:nfinprod){
+    print(nueproducts[cfinprod[i,1],cfinprod[i,2],drop=FALSE])
+    cat("\n")
+}
+
+```
+The LCA-NUE of the final demanded product is therefore `r nueproducts[cfinprod[nfinprod,1],cfinprod[nfinprod,2]]`
+
+# Examples
+## Default example
+
+```{r}
+supplychain<-supplychainsimple()
+egsupply<-exampleaimable(nproc,nprod,nenv)
+mfa<-materialflow(supplychain,eggsupply)
+
+lambda<-allocationbyvalue1(nproc,nprod)
+lcaap<-lcaapproach(P,nproc,nprod,lambda,chainflows,target)
+lambda<-lcaap[[1]]
+burden<-lcaap[[2]]
+lca<-lcaap[[3]]
+print(comparison(mfa,lca))
+```
+
+```{r}
+
+source("resourceefficiency.r")
+S<-supplychainsimple()
+E<-exampleaimable(S$nproc,S$nprod,S$nenv)
+mfa<-materialflow(S,E)
+
+lambda<-allocationbyflow(P,goods,origin,chainflows,recycled)
+lcaap<-lcaapproach(P,nproc,nprod,lambda,chainflows,target)
+lambda<-lcaap[[1]]
+burden<-lcaap[[2]]
+lca<-lcaap[[3]]
+print(comparison(mfa,lca))
+```
+
+Explanation for the LCA approach.
+
+The LCA approach takes builds on two principles
+
+1. The Nutrient Use Efficiency is inherently linked to the nutrient balance: 
+N-input = N-in-goods + N-losses. 
+2. Direct burdens caused in the process are 
+
+In this example ther is an eternal N-input of `r sum(resourcesproducts)` kg N per 'cycle'. All of this is added to the first process (Feed production). Feed processing has two goods that leave the process: feed that goes to process 2 (`r P[1,1]` kg) and exported crop/feed of `r P[4,1]` kg. Thus `r round(100*lambdamain[1,1],0)`% of burden (total N losses) is assigned to feed and `r round(100*lambdamain[4,1],0)`%. Thus the `r P[11,1]` kg of losses are distributed accordingly. The second process generates three goods that are leaving the process: livestock product that is processed in process 3, exported livestock product (co-product) and a co-product that is recycled as fertilizer in process 1. The burden of `r P[11,2]` kg is distrubuted according to the flow strength of N. Process 3 generates the final product and recycles a small amount of N as fertilizer.
+```{r,echo=FALSE}
+print(describe(burden[[1]]))
+```
+
 
 # Discussion
 ## Resource intensity
