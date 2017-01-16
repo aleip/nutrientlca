@@ -23,7 +23,7 @@ cat("\nExample No recycling - only food product and manure export\n")
 source("resourceefficiency_analysis.r")
 source("resourceuseefficiency_report.r")
 
-E<-example(c("largemanurerecycling","nofoodres"),S)
+E<-example(c("largemanurerecycling"),S)
 cat("\nExample Virtually all livestock coproduct recycled\n")
 source("resourceefficiency_analysis.r")
 source("resourceuseefficiency_report.r")

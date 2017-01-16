@@ -115,19 +115,29 @@ f_flowmatrix<-function(nproc,nrpod,lambda,origin,target){
 }
 f_flowfin<-function(flowmatrix){
     flowfin<-flowmatrix*upperTriangle(flowmatrix)
-    flowfin<-(flowfin/rowSums(flowfin))
+    #flowfin<-(flowfin/rowSums(flowfin))
     return(flowfin)
 }
 f_flowrec<-function(flowmatrix){
     #share recycled are not recycled    
     flowrec<-flowmatrix*(1-upperTriangle(flowmatrix))
-    for(i in 1:ncol(flowrec)) flowrec[i,i]=1-sum(flowrec[i,])
+    #for(i in 1:ncol(flowrec)) flowrec[i,i]=1-sum(flowrec[i,])
     return(flowrec)
 }
 
-f_recfate<-function(nproc,flowfin,flowrec){
+f_chainfraction<-function(nproc,flowfin){
     #nproc<-S$nproc
     chainfractions<-matrix(0,ncol=nproc,nrow=nproc)
+    
+    # Approach: separate 'direct' chain-flow ignoring recycling flows and
+    # then calculate recycling flows.
+    
+    # First calculate the distribution of burden that are transported
+    # along the supply chain.
+    # This loop calculates 'chainfractions' of burden that are 'caused' by
+    # a certain process i (rows) over all processes j (columns)
+    # The burden is attributed to the sum of products that leave each respective
+    # process.
     
     for(j in nproc:1){
         # Loop over all last-iut-one origins for the target
@@ -148,7 +158,13 @@ f_recfate<-function(nproc,flowfin,flowrec){
             }
         }
     }
+    chainfractions<-chainfractions/rowSums(chainfractions)
+
+    return(chainfractions)
+}
+f_recfate<-function(nproc,flowrec,chainfractions){
     
+    #nproc<-S$nproc
     finfractions<-matrix(0,ncol=nproc,nrow=nproc)
     for(i in 1:nproc){
         
@@ -158,8 +174,10 @@ f_recfate<-function(nproc,flowfin,flowrec){
                 # The recycled part enters in a previous step
                 flowrec[i,ii]*finfractions[ii,]
         }
+        
         finfractions[i,]<-finfractions[i,]+
-            # The non-recycled part is distribured as in defined in chainfractions along the chain
+            # The non-recycled part is distributed as in defined in  
+            # chainfractions along the chain
             flowrec[i,i]*chainfractions[i,]
     }
     #print(flowrec)
@@ -167,15 +185,7 @@ f_recfate<-function(nproc,flowfin,flowrec){
     #print(finfractions)
     return(recfate=finfractions)
 }
-allocationbyflow2<-function(P,nproc,nprod,prows,goods,flows){
-    
-    
-    temp<-c(1,temp[1:(nproc-1)])
-    temp2<-lam3*temp
-    temp2[1:(nproc-1),1:(nproc-1)]<-0
-    
-    return(list(lambda1=lam2,lambda2=lam3,lambda3=temp2))
-}
+
 allocationbyvalue1<-function(nproc,nprod){
     #Define relative 'value' (or whatever the basis for allocation is) over the goods produced in each process
     lam2<-matrix(0,ncol=nproc,nrow=nprod)
