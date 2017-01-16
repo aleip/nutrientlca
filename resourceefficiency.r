@@ -20,10 +20,15 @@ scaling<-function(A,B,f){
     s<-as.vector(ginv(as.matrix(A[1:ncol(A),]))%*%f)
     P[,]<-sapply(1:ncol(P),function(j) sapply(1:nrow(P),function(i) P[i,j]*s[j]))
     #return(list(s,P))
-    return(P)
+    return(list(s=s,P=P))
 }
 
-fillrecycling<-function(recycled,resources,P,nproc,nprod){
+fillrecycling<-function(E,S){
+    recycled<-S$recycled
+    resources<-S$resources
+    P<-E$P
+    nproc<-S$nproc
+    nprod<-S$nprod
     lrow<-recycled==1
     lrow<-lrow|is.na(apply(P[1:nprod,],1,sum))
     temp<-apply(P[1:nprod,]*lrow,1,sum,na.rm=T)
@@ -41,7 +46,7 @@ flowanalysis<-function(P,nprod,recycled,goods,resources,losses){
     chainflows<-sapply(1:nprod,function(x) if(round(sum(P[x,]),5)==0){which(P[x,]>0)>which(P[x,]<0)}else{FALSE})
     
     #flagging flows from the process they are generated (0 for imports)
-    origin<-sapply(1:nprod,function(x) if(length(which(P[x,]>0))){which(P[x,]>0)}else{which(P[x,]<0)})
+    origin<-sapply(1:nprod,function(x) if(length(which(P[x,]>0))){which(P[x,]>0)}else if(length(which(P[x,]<0))){which(P[x,]<0)}else{0})
     target<-sapply(1:nprod,function(x) if(length(which(P[x,]<0))){which(P[x,]<0)}else{0})
     target[which(target==0&recycled==1)]<-origin[which(target==0&recycled==1)]
     exportflows<-target==0
@@ -79,11 +84,6 @@ nutflowanalysi<-function(P,nproc,nprod,origin,resources,losses,prows){
     lcanue<-1/rintensity[1,nproc]
     
     return(list(V=V,r=r,rintensity=rintensity,lcanue=lcanue))
-}
-
-
-oritarget<-function(x,origin,target,recycling){
-    
 }
 
 
@@ -125,51 +125,47 @@ f_flowrec<-function(flowmatrix){
     return(flowrec)
 }
 
-f_recfate<-function(P,nproc,nprod,lambda,chainflows,exportflows){
-    
-    lam3<-lam2*(!(flows$chainflows))
-    lam3<-t(t(lam3)/colSums(lam3))
-    
-    
-    #Calculate the destination of an input to process 1
-    #that is not recycled
-    
-    # Create a matrix that 'chain fractions', ie. the 
-    # share of process j (column) 
-    # that is arriving at process i (rows)
+f_recfate<-function(nproc,flowfin,flowrec){
+    #nproc<-S$nproc
     chainfractions<-matrix(0,ncol=nproc,nrow=nproc)
-    chainfractions[,]<-sapply(1:nproc,function(j) sapply(1:nproc,function(i) 
-        if(i==j){
-            1
-        }else if(j<i){
-            0
-        }else{
-            Reduce("*",colSums(lam3[1:nproc,1:nproc])[i:(j-1)])
-        }
-        ))
     
-    
-    chainfractions<-matrix(0,ncol=nproc,nrow=nproc)
-    for(i in 1:1){
-        for(j in 1:nproc){
-            chainfractions[i,j]<-if(j>i){flowfin[i,j]}else{1}*flowfin[j,j]
-            for(jstar in 1:(i-1)){
-                chainfractions[i,j]<-Reduce("*",)
+    for(j in nproc:1){
+        # Loop over all last-iut-one origins for the target
+        for(i in j:1){
+            # The fraction arriving at target is the direct flow ... 
+            chainfractions[i,j]<-flowfin[i,j]*flowfin[j,j]
+            if(j==i)chainfractions[i,j]<-flowfin[j,j]
+            
+            if(i<j-1){
+                for(ii in (i+1):(j-1)){
+                    #chainfractions[ii,i]<-chainfractions[ii,i]+flowfin[ii,i]*if(i<j){chainfractions[i,j]}else{1}
+                    
+                    chainfractions[i,j]<-chainfractions[i,j] +
+                        # ... plus the fraction from origin-to-midorigin*fraction from 
+                        # mid-origin(already calculated) to target
+                        flowfin[i,ii]*chainfractions[ii,j]
+                }
             }
         }
     }
     
-    
-    
-    
-    # Share per process which is exported
-    lamexport<-colSums(lam3[flows$exportflows[1:nprod],])
-    
-    # Fate of recycled input to processes
-    # The rows give the process into which the input occurs
-    # The columns give the process to which the input is distributed
-    recfate<-t(t(chainfractions)*lamexport)
-    return(recfate=recfate)
+    finfractions<-matrix(0,ncol=nproc,nrow=nproc)
+    for(i in 1:nproc){
+        
+        for(ii in 1:max(1,(i-1))){
+            finfractions[i,]<-finfractions[i,]+
+                
+                # The recycled part enters in a previous step
+                flowrec[i,ii]*finfractions[ii,]
+        }
+        finfractions[i,]<-finfractions[i,]+
+            # The non-recycled part is distribured as in defined in chainfractions along the chain
+            flowrec[i,i]*chainfractions[i,]
+    }
+    #print(flowrec)
+    #print(chainfractions)
+    #print(finfractions)
+    return(recfate=finfractions)
 }
 allocationbyflow2<-function(P,nproc,nprod,prows,goods,flows){
     
@@ -227,7 +223,15 @@ calcmatrix<-function(V,lambda,dirburden){
 
 
 calcburden<-function(P,nproc,nprod,lambda,recfate,chainflows,target,origin,exportflows,resources,losses){
-    
+    P<-E$P
+    nproc<-S$nproc
+    nprod<-S$nprod
+    chainflows<-flows$chainflows
+    target<-flows$target
+    origin<-flows$origin
+    exportflows<-flows$exportflows
+    resources<-S$resources
+    losses<-S$losses
     # Burden must be total losses!
     # Distribute the direct burden (total losses) of each process 
     # over the products of the process including those that are recycled
@@ -290,9 +294,9 @@ calcburden<-function(P,nproc,nprod,lambda,recfate,chainflows,target,origin,expor
     lossfactors[lcell]<--burdenproducts[lcell]/finproducts[lcell]
     
     return(list(dirburden=dirburden,
+                dirresour=dirresour,
                 recburden=recburden,
                 embburdenprd=embburdenprd,
-                chainburdenprd=chainburdenprd,
                 burdenproducts=burdenproducts,
                 resourcesproducts=resourcesproducts,
                 finproducts=finproducts,
