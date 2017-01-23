@@ -5,33 +5,28 @@ date: "Thursday, January 05, 2017"
 output: html_document
 ---
 
-Script calculating resource efficiency according to Heijungs and Suh (2002).
-
 ```{r,echo=FALSE}
-source("resourceefficiency.r")
-doheader()
-supplychain<-supplychainsimple()
-processes<-supplychain[[1]]
-nproc<-supplychain[[2]]
-products<-supplychain[[3]]
-nprod<-supplychain[[4]]
-resources<-supplychain[[5]]
-losses<-supplychain[[6]]
-nenv<-supplychain[[7]]
-recycled<-supplychain[[8]]
+source("supplychaindefs.r")
+# A. Process example 
+S<-supplychainsimple("default")
+E<-example("aimable",S)
+cat("\nExample AIMABLE\n")
+source("resourceefficiency_analysis.r")
 
-waste<-c()
-goods<-products[!products%in% waste]
-interventions<-c(resources,losses)
+refS<-S
+refs<-s
+refE<-E
+refburden<-burden
+refflows<-flows
+refnutflow<-nutflow
 ```
-
 
 # Problem definition
 ## Processes
 We assess a three-process life cycle:
 
 ```{r, echo=FALSE}
-for(i in 1:nproc) cat(i,processes[i],"\n")
+for(i in 1:S$nproc) cat(i,S$processes[i],"\n")
 ```
 
 All flows are expressed in kg of nitrogen.
@@ -55,13 +50,13 @@ All flows are expressed in kg of nitrogen.
 ## Economic flows
 The following economic flows are differentiated:
 ```{r,echo=FALSE}
-for(i in 1:9) cat(i,products[i],"\n")
+for(i in 1:9) cat(i,S$products[i],"\n")
 ```
 
 In the default desing of the system, all residues are recycled in the system and none is wasted.
 
 ```{r, echo=FALSE}
-if(length(waste)>0)for(i in 1:length(goods)) cat(i,goods[i],"\n")
+if(length(S$waste)>0)for(i in 1:length(S$goods)) cat(i,S$goods[i],"\n")
 ```
 
 ## Environmental flows
@@ -69,7 +64,7 @@ We regard all environmental losses here independently of their nature.
 Therefore, there is only one environmental flow:
 
 ```{r,echo=FALSE}
-for(i in 1:length(interventions)) cat(i,interventions[i],"\n")
+for(i in 1:length(S$interventions)) cat(i,S$interventions[i],"\n")
 
 ```
 
@@ -77,20 +72,15 @@ for(i in 1:length(interventions)) cat(i,interventions[i],"\n")
 ## Process vectors
 
 The *Technology matrix _A_* gives the economic flows.
-It has `r length(products)` rows and `r length(processes)` columns.
+It has `r length(S$products)` rows and `r length(S$processes)` columns.
 
 The *Intervention matrix _B_* gives the environmental flows.
 
 The *Process matrix _P_* is the combination of A and B.Each column represents one *process vector* made from the technology vector t_i and the intervention vector i_i
 
 ```{r}
-egsupply<-exampleaimable(nproc,nprod,nenv)
-supplymat<-processmatrix(egsupply,supplychain)
-
-A<-supplymat[[1]]
-B<-supplymat[[2]]
-P<-supplymat[[3]]
-f<-egsupply[[3]]
+E<-example("aimable",S)
+source("resourceefficiency_analysis.r")
 ```
 
 
@@ -108,12 +98,9 @@ There is demand only for food. Therefore, all for all ecnomic flows, which are n
 ## Scaling vector
 The scaling vector is obtained by multiplying the inverse of the technology matrix with the demand vector f
 ```{r,echo=FALSE}
-scaling<-scaling(A,f)
-s<-scaling[[1]]
-P<-scaling[[2]]
 print("Scaling factors:")
-for(i in 1:nproc) cat("Process:",i," (",processes[i],") - ",s[i],"\n")
-cat("Demand vector:\n",f,"\n")
+for(i in 1:S$nproc) cat("Process:",i," (",S$processes[i],") - ",s$s[i],"\n")
+cat("Demand vector:\n",E$f,"\n")
 ```
 
 ## Fill recycling flows
@@ -124,8 +111,7 @@ Assumptions:
 3. The system draws on exactly ONE resource.If thereare more than one resource, then there must be rules how to account for accounting, but this has not been programmed yet.
 
 ```{r}
-P<-fillrecycling(recycled,P,nproc,nprod,origin,target)
-print(P)
+print(E$P)
 
 ```
 
@@ -133,28 +119,16 @@ print(P)
 
 - *Chainflows* are those which are produced in one process and consumed in another process
 
-```{r,echo=FALSE}
-flowanaly<-flowanalysis(P,nprod,recycled,goods,resources)
-chainflows<-flowanaly[[1]]
-origin<-flowanaly[[2]]
-target<-flowanaly[[3]]
-suminputs<-flowanaly[[4]]
-sumgoods<-flowanaly[[5]]
-exportflows<-flowanaly[[6]]
-sumlosses<-flowanaly[[7]]
-sumresources<-flowanaly[[8]]
-nue<-flowanaly[[9]]
-```
 ## Nitrogen Use Efficiency for each process
 NUE is calculated from the ratio of goods produced in a process to the sum of inputs. Here, NUE is calculated as a characteristicum of the process itself, thus no differentiation is made between different goods.
 
 ```{r,echo=FALSE}
 cat("Sum of inputs per process\n")
-print(suminputs)
+print(flows$suminputs)
 cat("Sum of goods produced per process\n")
-print(sumgoods)
+print(flows$sumgoods)
 cat("NUE per process\n")
-print(nue)
+print(flows$nue)
 ```
 ## Resource use per process
 Total resource use is the sum of all inputs (goods and resources) which are not recycled in the process.
@@ -180,25 +154,19 @@ Finally, the resource-need vector for the processes is obtained according to equ
 According to Uwizeye et al. (2016), the life-cycle NUE is obtained as inverse of the resource-intensity of the last process
 
 ```{r,echo=FALSE}
-nutflow<-nutflowanalysi(P,nproc,nprod,origin,resources)
-V<-nutflow[[1]]
-r<-nutflow[[2]]
-rintensity<-nutflow[[3]]
-lcanue<-nutflow[[4]]
-print(V)
-print(r)
-print(rintensity)
-print(lcanue)
+print(nutflow$V)
+print("Resource Use")
+print(nutflow$r)
+print("Resource Use Intensity")
+print(nutflow$rintensity)
+print("Full supply chain NUE (=NUE of the final process)")
+print(nutflow$lcanue)
 ```
 
 # Distribution of emissions according to allocation factors
 
 ## Allocation by share of nutrient flow from 'goods' or 'value
 ```{r}
-lambda<-allocationbyflow(P,goods,origin,chainflows,recycl)
-lambda<-allocationbyvalue1(nproc,nprod)
-lambdamain<-lambda[[2]]
-lambda<-lambda[[1]]
 print(lambda)
 ```
 
@@ -213,55 +181,43 @@ print(lambda)
 4. *Nutrient Loss Factors* are obtained from: fNLOSS=Losses/Products,
 whereby both Losses and Products shall be in the unit of N
 
-```{r,echo=FALSE}
-burden<-calcburden(P,nproc,nprod,lambda,lambdamain,chainflows,target)
-#Retrieve only final product-burden
-burdenproducts<-burden[[4]]
-resourcesproducts<-burden[[5]]
-finproducts<-burden[[6]]
-nueproducts<-burden[[7]]
-lossfactors<-burden[[8]]
-nfinprod<-burden[[9]]
-cfinprod<-burden[[10]]
-```
-
 # Results
 
 ## Material Flow Analysis approach
 Final Process matrix P: 
 ```{r, echo=FALSE}
-print(P)
+print(E$P)
 ```
 
 Scaling from 'original' dataset:
 ```{r, echo=FALSE}
-print(s)
+print(s$s)
 ```
 
 Nitrogen use efficiency per process:
 
-- `r processes[1]`: `r round(nue[1],3)`
-- `r processes[2]`: `r round(nue[2],3)`
-- `r processes[3]`: `r round(nue[3],3)`
+- `r S$processes[1]`: `r round(flows$nue[1],3)`
+- `r S$processes[2]`: `r round(flows$nue[2],3)`
+- `r S$processes[3]`: `r round(flows$nue[3],3)`
 
 
 Resource intensities:
 
-- `r processes[1]`: `r round(rintensity[1],3)`
-- `r processes[2]`: `r round(rintensity[2],3)`
-- `r processes[3]`: `r round(rintensity[3],3)`
+- `r S$processes[1]`: `r round(nutflow$rintensity[1],3)`
+- `r S$processes[2]`: `r round(nutflow$rintensity[2],3)`
+- `r S$processes[3]`: `r round(nutflow$rintensity[3],3)`
 
-Full-life cycle NUE is thus: `r round(100*lcanue,1)`%.
+Full-life cycle NUE is thus: `r round(100*nutflow$lcanue,1)`%.
 
 ## Allocation approach
 The allocation approach distributes the burden over all final products:
 ```{r,echo=FALSE}
-for(i in 1:nfinprod){
-    print(burdenproducts[cfinprod[i,1],cfinprod[i,2],drop=FALSE])
+for(i in 1:burden$nfinprod){
+    print(burden$burdenproducts[burden$cfinprod[i,1],burden$cfinprod[i,2],drop=FALSE])
     cat("\n")
 }
 ```
-With the sum of the burden `r sum(burdenproducts)` being the same as the original total burden.
+With the sum of the burden `r sum(burden$burdenproducts)` being the same as the original total burden.
 
 The resource use is according to the equation:
 
@@ -270,79 +226,23 @@ Input = Product + Losses
 as follows:
 
 ```{r,echo=FALSE}
-for(i in 1:nfinprod){
-    print(resourcesproducts[cfinprod[i,1],cfinprod[i,2],drop=FALSE])
+for(i in 1:burden$nfinprod){
+    print(burden$resourcesproducts[burden$cfinprod[i,1],burden$cfinprod[i,2],drop=FALSE])
     cat("\n")
 }
 
 ```
-Again, with the sum of the resources `r sum(resourcesproducts)` being the same as the original total resource.
+Again, with the sum of the resources `r sum(burden$resourcesproducts)` being the same as the original total resource.
 
 The Nutrient Use Efficiency calculates according to:
 
 NUE = Products / Resources:
 ```{r,echo=FALSE}
-for(i in 1:nfinprod){
-    print(nueproducts[cfinprod[i,1],cfinprod[i,2],drop=FALSE])
+for(i in 1:burden$nfinprod){
+    print(burden$nueproducts[burden$cfinprod[i,1],burden$cfinprod[i,2],drop=FALSE])
     cat("\n")
 }
 
 ```
-The LCA-NUE of the final demanded product is therefore `r nueproducts[cfinprod[nfinprod,1],cfinprod[nfinprod,2]]`
-
-# Examples
-## Default example
-
-```{r}
-supplychain<-supplychainsimple()
-egsupply<-exampleaimable(nproc,nprod,nenv)
-mfa<-materialflow(supplychain,eggsupply)
-
-lambda<-allocationbyvalue1(nproc,nprod)
-lcaap<-lcaapproach(P,nproc,nprod,lambda,chainflows,target)
-lambda<-lcaap[[1]]
-burden<-lcaap[[2]]
-lca<-lcaap[[3]]
-print(comparison(mfa,lca))
-```
-
-```{r}
-
-source("resourceefficiency.r")
-S<-supplychainsimple()
-E<-exampleaimable(S$nproc,S$nprod,S$nenv)
-mfa<-materialflow(S,E)
-
-lambda<-allocationbyflow(P,goods,origin,chainflows,recycled)
-lcaap<-lcaapproach(P,nproc,nprod,lambda,chainflows,target)
-lambda<-lcaap[[1]]
-burden<-lcaap[[2]]
-lca<-lcaap[[3]]
-print(comparison(mfa,lca))
-```
-
-Explanation for the LCA approach.
-
-The LCA approach takes builds on two principles
-
-1. The Nutrient Use Efficiency is inherently linked to the nutrient balance: 
-N-input = N-in-goods + N-losses. 
-2. Direct burdens caused in the process are 
-
-In this example ther is an eternal N-input of `r sum(resourcesproducts)` kg N per 'cycle'. All of this is added to the first process (Feed production). Feed processing has two goods that leave the process: feed that goes to process 2 (`r P[1,1]` kg) and exported crop/feed of `r P[4,1]` kg. Thus `r round(100*lambdamain[1,1],0)`% of burden (total N losses) is assigned to feed and `r round(100*lambdamain[4,1],0)`%. Thus the `r P[11,1]` kg of losses are distributed accordingly. The second process generates three goods that are leaving the process: livestock product that is processed in process 3, exported livestock product (co-product) and a co-product that is recycled as fertilizer in process 1. The burden of `r P[11,2]` kg is distrubuted according to the flow strength of N. Process 3 generates the final product and recycles a small amount of N as fertilizer.
-```{r,echo=FALSE}
-print(describe(burden[[1]]))
-```
-
-
-# Discussion
-## Resource intensity
-The resource intensity gives the quantity of resources required to sustain the process chain to produce the main desired product *plus* all other goods that are produced in the process chain.
-
-Each process has a characteristic resource intensity for each of the *total goods* that is generic for all goods produced in the process chain. 
-
-For example, process 1 has a resource intensity of `r round(rintensity[1],2)` which is obtained from the fact that it produces `r V[1,1]` of goods (sum of feed and exported goods). At the same time, it consumes `r V[2,1]` of goods produced in the second process and `r V[3,1]` of goods produced in the third process which are produced with the intensity `r round(rintensity[2],2)` and `r round(rintensity[3],2)`. Thus `r V[1,1]` * `r round(rintensity[1],2)` + `r V[2,1]` * `r round(rintensity[2],2)` + `r V[3,1]` * `r round(rintensity[3],2)` = `r round(V[1,1]*rintensity[1],2)` + `r round(V[2,1]*rintensity[2],2)` + `r round(V[3,1]*rintensity[3],2)` = `r round(V[1,1]*rintensity[1]+V[2,1]*rintensity[2]+V[3,1]*rintensity[3],2)`. A product that 'comes out' of the first process has the resource efficiency `r round(1/rintensity[1],3)`, a product that results from the second process (thus goes through the first two processes) has the resource efficiency `r round(1/rintensity[2],3)` and a process that goes through all three processes is produced with the efficency `r round(1/rintensity[3],3)`
-
-Overall, the process chain generates `r sum(apply(V,1,sum))` units of goods with a total input of `r sumgoods[1]`, thus giving an overall efficiency of `r sum(apply(V,1,sum))/sumgoods[1]`.
-
+The LCA-NUE of the final demanded product is therefore `r burden$nueproducts[burden$cfinprod[burden$nfinprod,1],burden$cfinprod[burden$nfinprod,2]]`
 

@@ -19,7 +19,7 @@ scaling<-function(A,B,f){
     P<-rbind(A,B)
     s<-as.vector(ginv(as.matrix(A[1:ncol(A),]))%*%f)
     P[,]<-sapply(1:ncol(P),function(j) sapply(1:nrow(P),function(i) P[i,j]*s[j]))
-    #return(list(s,P))
+    
     return(list(s=s,P=P))
 }
 
@@ -42,8 +42,17 @@ fillrecycling<-function(E,S){
     return(P)
 }
 
-flowanalysis<-function(P,nprod,recycled,goods,resources,losses){
-    chainflows<-sapply(1:nprod,function(x) if(round(sum(P[x,]),5)==0){which(P[x,]>0)>which(P[x,]<0)}else{FALSE})
+flowanalysis<-function(E,S){
+    #E$P,S$nprod,S$recycled,S$goods,S$resources,S$losses
+    #P,nprod,recycled,goods,resources,losses
+    P<-E$P
+    nprod<-S$nprod
+    recycled<-S$recycled
+    products<-S$products
+    goods<-S$goods
+    resources<-S$resources
+    losses<-S$losses
+    chainflows<-sapply(1:nprod,function(x) if(round(sum(P[x,]),5)==0 & length(which(P[x,]!=0)>0)){which(P[x,]>0)>which(P[x,]<0)}else{FALSE})
     
     #flagging flows from the process they are generated (0 for imports)
     origin<-sapply(1:nprod,function(x) if(length(which(P[x,]>0))){which(P[x,]>0)}else if(length(which(P[x,]<0))){which(P[x,]<0)}else{0})
@@ -53,15 +62,18 @@ flowanalysis<-function(P,nprod,recycled,goods,resources,losses){
     
     goodsproducts<-P[rownames(P)%in%goods,]
     goodsproducts[goodsproducts<0]<-0
-    sumgoods<-apply(goodsproducts[rownames(P)%in%goods,],2,sum)
+    sumgoods<-apply(goodsproducts,2,sum)
     goodstemp<-P[rownames(P)%in%goods,]
     goodstemp[goodstemp>0]<-0
-    suminputs<--apply(goodstemp[rownames(P)%in%goods,],2,sum)
+    suminputs<--apply(goodstemp,2,sum)
     suminputs<-suminputs-P[rownames(P)%in%resources,]
     sumresources<-P[rownames(P)%in%resources,]
     sumlosses<-P[rownames(P)%in%losses,]
     nue<-sumgoods/suminputs
     
+    names(chainflows)<-products
+    names(origin)<-products
+    names(target)<-products
     
     return(list(chainflows=chainflows,
                 origin=origin,
@@ -74,35 +86,63 @@ flowanalysis<-function(P,nprod,recycled,goods,resources,losses){
                 nue=nue))
 }
 
-nutflowanalysi<-function(P,nproc,nprod,origin,resources,losses,prows){
+nutflowanalysi<-function(E,S,flows){
+    P<-E$P
+    nproc<-S$nproc
+    nprod<-S$nprod
+    origin<-flows$origin
+    resources<-S$resources
+    losses<-S$losses
+    waste<-S$waste
+    goods<-S$goods
+    prows<-S$prows
+    
+    sel<-which(rownames(P)%in%goods)
+    #print(apply(as.matrix(P[sel,][origin[sel]==3,]),2,sum))
+    #print(P[sel,][origin[sel]==3,,drop=FALSE])
     V<-matrix(rep(0,nproc**2),ncol=nproc,nrow=nproc)
-    V<-t(sapply(1:nproc,function(x) apply(P[1:nprod,][origin==x,],2,sum)))
+    V<-t(sapply(1:nproc,function(x) apply(P[sel,][origin[sel]==x,,drop=FALSE],2,sum)))
     r<-as.vector(as.matrix(-P[prows%in%resources,]))
     e<-as.vector(as.matrix(-P[prows%in%losses,]))
     rintensity<-t(r)%*%ginv(V)
     eintensity<-t(e)%*%ginv(V)
     lcanue<-1/rintensity[1,nproc]
     
+    rownames(V)<-colnames(P)
+    colnames(rintensity)<-colnames(P)
+    colnames(eintensity)<-colnames(P)
+    
     return(list(V=V,r=r,rintensity=rintensity,lcanue=lcanue))
 }
 
 
 
-allocationbyflow<-function(P,goods,origin,recycled,prows){
+allocationbyflow<-function(E,S,flows){
     #Re-scale factors so that their sum is 1
     # -- note that for multiplication of columns by vector the number of rows must be the length of the vector
-    goodsproducts<-P[prows%in%goods,]
-    goodsproducts<-sapply(1:ncol(goodsproducts),function(x) goodsproducts[,x]*(flows$origin==x))
+    P<-E$P
+    goods<-S$goods
+    origin<-flows$origin
+    recycled<-S$recycled
+    prows<-S$prows
+    products<-S$products
+    nprod<-S$nprod
+    
+    sel<-which(products%in%goods)
+    sel<-1:nprod
+    goodsproducts<-P[sel,]
+    goodsproducts<-sapply(1:ncol(goodsproducts),function(x) goodsproducts[,x]*(origin[sel]==x))
     
     lam2<-t(t(goodsproducts)/apply(goodsproducts,2,sum))
     lam2<-t(t(goodsproducts))
-    lam2[recycled==1,]<-0
+    lam2[recycled[sel]==1,]<-0
     
     lam2<-t(t(lam2)/colSums(lam2))
-    return(lambda<-lam2)
+    colnames(lam2)<-colnames(P)
+    return(lambda=lam2)
 }
 
-f_flowmatrix<-function(nproc,nrpod,lambda,origin,target){
+f_flowmatrix<-function(nproc,nrpod,lambda,origin,target,goods){
     flowmatrix<-matrix(0,ncol=nproc,nrow=nproc)
     flowmatrix<-sapply(1:nproc,function(j) sapply(1:nproc,function(i)
         if(i!=j){
@@ -110,7 +150,13 @@ f_flowmatrix<-function(nproc,nrpod,lambda,origin,target){
         }else{
             sum(lambda[origin==i&target==0,])
         }
-        ))
+    ))
+    #sel<-which(rownames(lambda)%in%goods)
+    #print(apply(as.matrix(P[sel,][origin[sel]==3,]),2,sum))
+    #print(P[sel,][origin[sel]==3,,drop=FALSE])
+    #V<-matrix(rep(0,nproc**2),ncol=nproc,nrow=nproc)
+    #V<-t(sapply(1:nproc,function(x) apply(lambda[sel,][origin[sel]==x,,drop=FALSE],2,sum)))
+    
     return(flowmatrix)
 }
 f_flowfin<-function(flowmatrix){
@@ -140,7 +186,7 @@ f_chainfraction<-function(nproc,flowfin){
     # process.
     
     for(j in nproc:1){
-        # Loop over all last-iut-one origins for the target
+        # Loop over all last-but-one origins for the target
         for(i in j:1){
             # The fraction arriving at target is the direct flow ... 
             chainfractions[i,j]<-flowfin[i,j]*flowfin[j,j]
@@ -159,11 +205,14 @@ f_chainfraction<-function(nproc,flowfin){
         }
     }
     chainfractions<-chainfractions/rowSums(chainfractions)
-
+    
+    
+    
+    
     return(chainfractions)
 }
-f_recfate<-function(nproc,flowrec,chainfractions){
-    
+f_recfate<-function(S,flowrec,chainfractions){
+    nproc<-S$nproc
     #nproc<-S$nproc
     finfractions<-matrix(0,ncol=nproc,nrow=nproc)
     for(i in 1:nproc){
@@ -178,45 +227,20 @@ f_recfate<-function(nproc,flowrec,chainfractions){
         finfractions[i,]<-finfractions[i,]+
             # The non-recycled part is distributed as in defined in  
             # chainfractions along the chain
-            flowrec[i,i]*chainfractions[i,]
+            (1-sum(flowrec[i,]))*chainfractions[i,]
     }
     #print(flowrec)
     #print(chainfractions)
     #print(finfractions)
-    return(recfate=finfractions)
+    #return(recfate=finfractions)
+    return(recfate=chainfractions)
 }
 
-allocationbyvalue1<-function(nproc,nprod){
-    #Define relative 'value' (or whatever the basis for allocation is) over the goods produced in each process
-    lam2<-matrix(0,ncol=nproc,nrow=nprod)
-    # Main products 'double value' per unit of N
-    lam2[1,1]<-P[1,1]*2
-    lam2[2,2]<-P[2,2]*2
-    lam2[3,3]<-P[3,3]*2
-    # Exported products 'normal value
-    lam2[4,1]<-P[4,1]*1
-    lam2[5,2]<-P[5,2]*1
-    # Recycled products backwards half value
-    lam2[8,2]<-P[8,2]*0.5
-    lam2[9,3]<-P[9,3]*0.5
-    # Recycling to same process no burden
-    lam2[6,1]<-P[6,1]*0
-    
-    lam2<-t(t(lam2)/colSums(lam2))
-    
-    # lam3 is the allocation to the products that are not flowing back into the supply chain
-    # (thus exports or connecting flows)
-    lam3<-lam2*(!chainflows)
-    lam3<-t(t(lam3)/colSums(lam3))
-    
-    return(list(lam2,lam3))
-    
-}
 calcmatrix<-function(V,lambda,dirburden){
     #Retrieve the sum of net goods per process
     sumnetgoods<-colSums(V*diag(3))
     temp<-t(t(lambda)*sumnetgoods)
- 
+    
     #Construct matrix
     E<-V
     E[,]<-0
@@ -225,14 +249,14 @@ calcmatrix<-function(V,lambda,dirburden){
     E[3,1]<--dirburden[9,3]
     E[2,3]<--dirburden[2,2]
     E<-E-diag(3)*colSums(dirburden)
- 
+    
     lossintensity<-t(sumnetgoods)%*%ginv(E)
     
     lossintensity%*%E
 }
 
 
-calcburden<-function(P,nproc,nprod,lambda,recfate,chainflows,target,origin,exportflows,resources,losses){
+calcburden<-function(E,S,flows,lambda,recfate){
     P<-E$P
     nproc<-S$nproc
     nprod<-S$nprod
@@ -270,24 +294,24 @@ calcburden<-function(P,nproc,nprod,lambda,recfate,chainflows,target,origin,expor
     # This formula calculates how much burden of a chainflow needs 
     # to be added to the target process
     recburden<-colSums(sapply(1:nproc,function(x) rowSums(dirburden*chainflows*(target==x))))
-    
     # Add burden from original chainflows
-    recburden<-recburden+c(0,colSums(dirburden[1:2,])[1:2])
-
+    #recburden<-recburden+c(0,colSums(dirburden[1:(nproc-1),])[1:(nproc-1)])
+    recburden<-recburden+colSums(dirburden*(!chainflows))
     # The embedded burden is distributed over the processes...
     embburden<-recburden*recfate
     embburdenprc<-colSums(embburden)
-    
     # Distribute over exported products
     exproducts<-A*exportflows
-    embburdenprd<-embburdenprc*exproducts/colSums(exproducts)
+    #print(t(embburdenprc*t(exproducts)))
+    embburdenprd<-t(embburdenprc*t(exproducts))
+    embburdenprd<-t(t(embburdenprd)/colSums(exproducts))
     
     # ... and added to the direct burden
     # This yields the burden for each process
     # Through recycling the burden of processes that receive recycling flows
     # is increased and those recycling is decreased
-    burdenproducts<-dirburden*exportflows+embburdenprd
-
+    #burdenproducts<-dirburden*exportflows+embburdenprd
+    burdenproducts<-embburdenprd
     # Resources must be calculated as N in product + N in losses
     finproducts<-A*exportflows
     resourcesproducts<-finproducts+burdenproducts
@@ -306,6 +330,7 @@ calcburden<-function(P,nproc,nprod,lambda,recfate,chainflows,target,origin,expor
     return(list(dirburden=dirburden,
                 dirresour=dirresour,
                 recburden=recburden,
+                embburden=embburden,
                 embburdenprd=embburdenprd,
                 burdenproducts=burdenproducts,
                 resourcesproducts=resourcesproducts,
@@ -316,11 +341,109 @@ calcburden<-function(P,nproc,nprod,lambda,recfate,chainflows,target,origin,expor
                 cfinprod=cfinprod))
 }
 
+f_reffanalysis<-function(
+    supplydef="default",
+    supplyexe="aimable",
+    supplyall="NA"
+){
+    # Function to generate a Lists (examp) of Lists (burden, nutflow, ...) 
+    # with the results.
+    # The number of scenarios run is given by the length of the vector of 
+    # 'examples' with flow rates (supplyexe).
+    # The other two vectors supplydef and supplyall are indicating the 
+    # system definitions and allocation rules to be used. Those vectors can
+    # be shorter (or just contain one value) in which case the last value is
+    # used for all further scenarios
+    # 
+    # Allocations:
+    # NA for applying MFA aprroach
+    # 'byflow','byvalue1','byvalue2' etc for LCA appraoch
+    
+    nexamples<-length(supplyexe)
+    
+    for(i in 1:nexamples){
+        
+        stype<-if(length(supplydef)<i){supplydef[length(supplydef)]}else{supplydef[i]}
+        etype<-supplyexe[i]
+        dolambda<-if(length(supplyall)<i){supplyall[length(supplyall)]}else{
+            supplyall[i]}
+        if(!is.na(dolambda)) {if(dolambda=="NA") {dolambda<-NA}}
+        
+        cat(i,stype,etype,dolambda,"\n")
+        S<-supplychainsimple(stype)
+        E<-supplyvalues(etype,S)
+        
+        s<-scaling(E$A,E$B,E$f)
+        E$P<-s$P
+        E$P<-fillrecycling(E,S)
+        flows<-flowanalysis(E,S)
+        # B. Calculation of material flow analysis
+        if(is.na(dolambda)){
+            nutflow<-nutflowanalysi(E,S,flows)
+            curex<-list(stype=stype,etype=etype,dolambda=dolambda,
+                        S=S,E=E,flows=flows,nutflow=nutflow)
+        }else{
+            # C. Calculation of efficiency acc to allocation
+            if(dolambda=="byflow"){
+                lambda<-allocationbyflow(E,S,flows) 
+            }else if(dolambda=="byvalue1"){
+                lambda<-allocationbyvalue1(E$P,S$nprod,S$nproc) 
+            }else if(dolambda=="byvalue2"){
+                lambda<-allocationbyvalue2(E$P,S$nprod,S$nproc) 
+            }
+            #print(lambda)
+            flowmatrix<-f_flowmatrix(S$nproc,S$nprod,lambda,flows$origin,flows$target)
+            #print(flowmatrix)
+            flowfin<-f_flowfin(flowmatrix)
+            print("flowfin")
+            print(flowfin)
+            flowrec<-f_flowrec(flowmatrix)
+            #print('flowrec')
+            #print(flowrec)
+            chainfractions<-f_chainfraction(S$nproc,flowfin)
+            
+            print("chainfractions")
+            print(chainfractions)
+            recfate<-f_recfate(S,flowrec,chainfractions)
+            print(recfate)
+            burden<-calcburden(E,S,flows,lambda,recfate)
+            curex<-list(stype=stype,etype=etype,dolambda=dolambda,
+                        S=S,E=E,flows=flows,burden=burden,
+                        lambda=lambda,flowmatrix=flowmatrix,flowfin=flowfin,
+                        flowrec=flowrec,chainfractions=chainfractions,recfate=recfate)
+        }
+        if(i==1){examp<-curex}else if(i==2){examp<-list(examp,curex)}else{
+            examp[[i]]<-curex
+        }
+    }
+    return(examp)
+}
 
-comparison<-function(mfa,lca){
-    cat("The nutrient use efficiency of the final demanded products",
-        "is ",mfa," on the basis of the MFA approach, and ",
-        lca," if calculated with allocation.")
+comparison<-function(a,what2,which2=NULL){
+    if(is.null(which2))which2<-1:length(a)
+    if(what2%in%"P"){
+        for(i in which2){
+            b<-a[[i]]
+            cat("\nProcess matrix",i,"\n")
+            print(b$E$P)
+        }
+    }
+    if(what2%in%"nue"){
+        cat("\nNutrient Use Efficiency - system definition - example\n")
+        for(i in which2){
+            b<-a[[i]]
+            if(is.na(b$dolambda)){
+                approach<-"MFA"
+                cat(i,approach,round(as.vector(1/b$nutflow$rintensity),2),
+                    "-",b$stype,"-",b$etype,"\n")
+            }else{
+                approach<-"LCA"
+                b$burden$nueproducts[b$burden$nueproducts==0]<-NA
+                cat(i,approach,round(apply(b$burden$nueproducts,2,mean,na.rm=TRUE),5),
+                    "-",b$stype,"-",b$etype,"-",b$dolambda,"\n")
+            }
+        }
+    }
 }
 
 describe<-function(X){
@@ -384,7 +507,7 @@ temploop<-function(V){
         F3<-a*c*e/leave
         #Ft must give 1
         Ft<-F1+F2+F3
- 
+        
         exitprod<-lambda*(target==0)
         cmult<-diag(nproc)
         cmult[2:nproc,2:nproc]<-lambda[1:(nproc-1),1:(nproc-1)]

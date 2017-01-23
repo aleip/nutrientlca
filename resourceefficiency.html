@@ -67,7 +67,8 @@ img {
 </div>
 
 
-<p>Script calculating resource efficiency according to Heijungs and Suh (2002).</p>
+<pre><code>## 
+## Example AIMABLE</code></pre>
 <div id="problem-definition" class="section level1">
 <h1>Problem definition</h1>
 <div id="processes" class="section level2">
@@ -130,13 +131,8 @@ img {
 <p>The <em>Technology matrix <em>A</em></em> gives the economic flows. It has 9 rows and 3 columns.</p>
 <p>The <em>Intervention matrix <em>B</em></em> gives the environmental flows.</p>
 <p>The <em>Process matrix <em>P</em></em> is the combination of A and B.Each column represents one <em>process vector</em> made from the technology vector t_i and the intervention vector i_i</p>
-<pre class="r"><code>egsupply&lt;-exampleaimable(nproc,nprod,nenv)
-supplymat&lt;-processmatrix(egsupply,supplychain)
-
-A&lt;-supplymat[[1]]
-B&lt;-supplymat[[2]]
-P&lt;-supplymat[[3]]
-f&lt;-egsupply[[3]]</code></pre>
+<pre class="r"><code>E&lt;-example(&quot;aimable&quot;,S)
+source(&quot;resourceefficiency_analysis.r&quot;)</code></pre>
 </div>
 <div id="allocation-factors" class="section level2">
 <h2>Allocation factors</h2>
@@ -154,7 +150,7 @@ f&lt;-egsupply[[3]]</code></pre>
 <h2>Scaling vector</h2>
 <p>The scaling vector is obtained by multiplying the inverse of the technology matrix with the demand vector f</p>
 <pre><code>## [1] &quot;Scaling factors:&quot;</code></pre>
-<pre><code>## Process: 1  ( Feed production ) -  2 
+<pre><code>## Process: 1  ( Feed production ) -  1 
 ## Process: 2  ( Livestock production ) -  1 
 ## Process: 3  ( Food production ) -  1</code></pre>
 <pre><code>## Demand vector:
@@ -168,8 +164,7 @@ f&lt;-egsupply[[3]]</code></pre>
 <li>All recycling flows can be absorbed. If more is produced then the surplus must be shifted to ‘export’ or ‘waste’ (depending..) but this is not programmed yet.</li>
 <li>The system draws on exactly ONE resource.If thereare more than one resource, then there must be rules how to account for accounting, but this has not been programmed yet.</li>
 </ol>
-<pre class="r"><code>P&lt;-fillrecycling(recycling,P,nproc,nprod)
-print(P)</code></pre>
+<pre class="r"><code>print(E$P)</code></pre>
 <pre><code>##              Feed production Livestock production Food production
 ## feed                      50                  -50             0.0
 ## anim                       0                   20           -20.0
@@ -193,14 +188,14 @@ print(P)</code></pre>
 <h2>Nitrogen Use Efficiency for each process</h2>
 <p>NUE is calculated from the ratio of goods produced in a process to the sum of inputs. Here, NUE is calculated as a characteristicum of the process itself, thus no differentiation is made between different goods.</p>
 <pre><code>## Sum of inputs per process</code></pre>
-<pre><code>##              Feed production Livestock production Food production
-## N fertilizer             122                   50              20</code></pre>
+<pre><code>##      Feed production Livestock production      Food production 
+##                  122                   50                   20</code></pre>
 <pre><code>## Sum of goods produced per process</code></pre>
 <pre><code>##      Feed production Livestock production      Food production 
 ##                100.0                 35.0                 14.5</code></pre>
 <pre><code>## NUE per process</code></pre>
-<pre><code>##              Feed production Livestock production Food production
-## N fertilizer       0.8196721                  0.7           0.725</code></pre>
+<pre><code>##      Feed production Livestock production      Food production 
+##            0.8196721            0.7000000            0.7250000</code></pre>
 </div>
 <div id="resource-use-per-process" class="section level2">
 <h2>Resource use per process</h2>
@@ -213,13 +208,16 @@ print(P)</code></pre>
 <p>The inverse of this matrix is multiplied with the resource vector</p>
 <p>Finally, the resource-need vector for the processes is obtained according to equation (4) in Suh et a., (2011)</p>
 <p>According to Uwizeye et al. (2016), the life-cycle NUE is obtained as inverse of the resource-intensity of the last process</p>
-<pre><code>##      Feed production Livestock production Food production
-## [1,]              90                  -50             0.0
-## [2,]             -10                   35           -20.0
-## [3,]              -2                    0            14.5</code></pre>
+<pre><code>##                      Feed production Livestock production Food production
+## Feed production                   90                  -50             0.0
+## Livestock production             -10                   35           -20.0
+## Food production                   -2                    0            14.5</code></pre>
+<pre><code>## [1] &quot;Resource Use&quot;</code></pre>
 <pre><code>## [1] 100   0   0</code></pre>
-<pre><code>##          [,1]     [,2]     [,3]
-## [1,] 1.393274 1.990391 2.745367</code></pre>
+<pre><code>## [1] &quot;Resource Use Intensity&quot;</code></pre>
+<pre><code>##      Feed production Livestock production Food production
+## [1,]        1.393274             1.990391        2.745367</code></pre>
+<pre><code>## [1] &quot;Full supply chain NUE (=NUE of the final process)&quot;</code></pre>
 <pre><code>## [1] 0.36425</code></pre>
 </div>
 </div>
@@ -227,21 +225,17 @@ print(P)</code></pre>
 <h1>Distribution of emissions according to allocation factors</h1>
 <div id="allocation-by-share-of-nutrient-flow-from-goods-or-value" class="section level2">
 <h2>Allocation by share of nutrient flow from ‘goods’ or ’value</h2>
-<pre class="r"><code>lambda&lt;-allocationbyflow(P,goods,origin,chainflows,recycling)
-lambda&lt;-allocationbyvalue1(nproc,nprod)
-lambdamain&lt;-lambda[[2]]
-lambda&lt;-lambda[[1]]
-print(lambda)</code></pre>
-<pre><code>##            [,1] [,2]       [,3]
-##  [1,] 0.7142857  0.0 0.00000000
-##  [2,] 0.0000000  0.8 0.00000000
-##  [3,] 0.0000000  0.0 0.96153846
-##  [4,] 0.2857143  0.0 0.00000000
-##  [5,] 0.0000000  0.1 0.00000000
-##  [6,] 0.0000000  0.0 0.00000000
-##  [7,] 0.0000000  0.0 0.00000000
-##  [8,] 0.0000000  0.1 0.00000000
-##  [9,] 0.0000000  0.0 0.03846154</code></pre>
+<pre class="r"><code>print(lambda)</code></pre>
+<pre><code>##          Feed production Livestock production Food production
+## feed           0.5555556            0.0000000        0.000000
+## anim           0.0000000            0.5714286        0.000000
+## food           0.0000000            0.0000000        0.862069
+## feedco         0.4444444            0.0000000        0.000000
+## animco         0.0000000            0.1428571        0.000000
+## cropreso       0.0000000            0.0000000        0.000000
+## cropresi       0.0000000            0.0000000        0.000000
+## manure         0.0000000            0.2857143        0.000000
+## foodres        0.0000000            0.0000000        0.137931</code></pre>
 </div>
 <div id="steps-to-account-for-allocation" class="section level2">
 <h2>Steps to account for allocation</h2>
@@ -271,7 +265,7 @@ print(lambda)</code></pre>
 ## N fertilizer            -100                    0             0.0
 ## N losses                  22                   15             5.5</code></pre>
 <p>Scaling from ‘original’ dataset:</p>
-<pre><code>## [1] 2 1 1</code></pre>
+<pre><code>## [1] 1 1 1</code></pre>
 <p>Nitrogen use efficiency per process:</p>
 <ul>
 <li>Feed production: 0.82</li>
@@ -290,90 +284,37 @@ print(lambda)</code></pre>
 <h2>Allocation approach</h2>
 <p>The allocation approach distributes the burden over all final products:</p>
 <pre><code>##        Feed production
-## feedco       -6.774725
+## feedco        15.19408
 ## 
 ##        Livestock production
-## animco            -3.381868
+## animco             5.072648
 ## 
 ##      Food production
-## food       -32.34341</code></pre>
-<p>With the sum of the burden -42.5 being the same as the original total burden.</p>
+## food        22.23327</code></pre>
+<p>With the sum of the burden 42.5 being the same as the original total burden.</p>
 <p>The resource use is according to the equation:</p>
 <p>Input = Product + Losses</p>
 <p>as follows:</p>
 <pre><code>##        Feed production
-## feedco        46.77473
+## feedco        55.19408
 ## 
 ##        Livestock production
-## animco             8.381868
+## animco             10.07265
 ## 
 ##      Food production
-## food        44.84341</code></pre>
+## food        34.73327</code></pre>
 <p>Again, with the sum of the resources 100 being the same as the original total resource.</p>
 <p>The Nutrient Use Efficiency calculates according to:</p>
 <p>NUE = Products / Resources:</p>
 <pre><code>##        Feed production
-## feedco       0.8551627
+## feedco       0.7247154
 ## 
 ##        Livestock production
-## animco            0.5965257
+## animco            0.4963938
 ## 
 ##      Food production
-## food       0.2787478</code></pre>
-<p>The LCA-NUE of the final demanded product is therefore 0.2787478</p>
-</div>
-</div>
-<div id="examples" class="section level1">
-<h1>Examples</h1>
-<div id="default-example" class="section level2">
-<h2>Default example</h2>
-<pre class="r"><code>supplychain&lt;-supplychainsimple()
-egsupply&lt;-exampleaimable(nproc,nprod,nenv)
-mfa&lt;-materialflow(supplychain,eggsupply)
-
-lambda&lt;-allocationbyvalue1(nproc,nprod)
-lcaap&lt;-lcaapproach(P,nproc,nprod,lambda,chainflows,target)
-lambda&lt;-lcaap[[1]]
-burden&lt;-lcaap[[2]]
-lca&lt;-lcaap[[3]]
-print(comparison(mfa,lca))</code></pre>
-<pre><code>## The nutrient use efficiency of the final demanded products is  0.36425  on the basis of the MFA approach, and  0.2787478  if calculated with allocation.NULL</code></pre>
-<pre class="r"><code>supplychain&lt;-supplychainsimple()
-egsupply&lt;-exampleaimable(nproc,nprod,nenv)
-mfa&lt;-materialflow(supplychain,eggsupply)
-
-lambda&lt;-allocationbyflow(P,goods,origin,chainflows,recycling)
-lcaap&lt;-lcaapproach(P,nproc,nprod,lambda,chainflows,target)
-lambda&lt;-lcaap[[1]]
-burden&lt;-lcaap[[2]]
-lca&lt;-lcaap[[3]]
-print(comparison(mfa,lca))</code></pre>
-<pre><code>## The nutrient use efficiency of the final demanded products is  0.36425  on the basis of the MFA approach, and  0.2787478  if calculated with allocation.NULL</code></pre>
-<p>Explanation for the LCA approach.</p>
-<p>The LCA approach takes builds on two principles</p>
-<ol style="list-style-type: decimal">
-<li>The Nutrient Use Efficiency is inherently linked to the nutrient balance: N-input = N-in-goods + N-losses.</li>
-<li></li>
-</ol>
-<p>In this example ther is an eternal N-input of 100 kg N per ‘cycle’. All of this is added to the first process (Feed production). Feed processing has two goods that leave the process: feed that goes to process 2 (50 kg) and exported crop/feed of 40 kg. Thus 71% of burden (total N losses) is assigned to feed and 29%. Thus the 22 kg of losses are distributed accordingly. The second process generates three goods that are leaving the process: livestock product that is processed in process 3, exported livestock product (co-product) and a co-product that is recycled as fertilizer in process 1. The burden of 15 kg is distrubuted according to the flow strength of N. Process 3 generates the final product and recycles a small amount of N as fertilizer.</p>
-<pre><code>##                Process Product       Value
-## 1      Feed production    feed -12.2222222
-## 2      Feed production  feedco  -9.7777778
-## 3 Livestock production    anim  -8.5714286
-## 4 Livestock production  animco  -2.1428571
-## 5 Livestock production  manure  -4.2857143
-## 6      Food production    food  -4.7413793
-## 7      Food production foodres  -0.7586207</code></pre>
-</div>
-</div>
-<div id="discussion" class="section level1">
-<h1>Discussion</h1>
-<div id="resource-intensity" class="section level2">
-<h2>Resource intensity</h2>
-<p>The resource intensity gives the quantity of resources required to sustain the process chain to produce the main desired product <em>plus</em> all other goods that are produced in the process chain.</p>
-<p>Each process has a characteristic resource intensity for each of the <em>total goods</em> that is generic for all goods produced in the process chain.</p>
-<p>For example, process 1 has a resource intensity of 1.39 which is obtained from the fact that it produces 90 of goods (sum of feed and exported goods). At the same time, it consumes -10 of goods produced in the second process and -2 of goods produced in the third process which are produced with the intensity 1.99 and 2.75. Thus 90 * 1.39 + -10 * 1.99 + -2 * 2.75 = 125.39 + -19.9 + -5.49 = 100. A product that ‘comes out’ of the first process has the resource efficiency 0.718, a product that results from the second process (thus goes through the first two processes) has the resource efficiency 0.502 and a process that goes through all three processes is produced with the efficency 0.364</p>
-<p>Overall, the process chain generates 57.5 units of goods with a total input of 100, thus giving an overall efficiency of 0.575.</p>
+## food       0.3598855</code></pre>
+<p>The LCA-NUE of the final demanded product is therefore 0.3598855</p>
 </div>
 </div>
 

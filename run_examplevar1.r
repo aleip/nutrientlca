@@ -1,8 +1,6 @@
 source("supplychaindefs.r")
 # A. Process example 
 S<-supplychainsimple("default")
-
-
 E<-example("aimable",S)
 cat("\nExample AIMABLE\n")
 source("resourceefficiency_analysis.r")
