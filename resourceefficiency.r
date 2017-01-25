@@ -51,7 +51,16 @@ flowanalysis<-function(E,S){
     goods<-S$goods
     resources<-S$resources
     losses<-S$losses
-    chainflows<-sapply(1:nprod,function(x) if(round(sum(P[x,]),5)==0 & length(which(P[x,]!=0)>0)){which(P[x,]>0)>which(P[x,]<0)}else{FALSE})
+    dochainflows<-function(x,P){
+        if(is.na(sum(P[x,]))){y<-which(is.na(P[x,]))}else
+        if(round(sum(P[x,]),5)==0 & length(which(P[x,]!=0)>0)){
+            y<-which(P[x,]>0)>which(P[x,]<0)
+        }else{
+            y<-FALSE
+        }
+        return(y)
+    }
+    chainflows<-sapply(1:nprod,function(x) dochainflows(x,P))
     
     #flagging flows from the process they are generated (0 for imports)
     origin<-sapply(1:nprod,function(x) if(length(which(P[x,]>0))){which(P[x,]>0)}else if(length(which(P[x,]<0))){which(P[x,]<0)}else{0})
@@ -198,12 +207,15 @@ systemseparation<-function(E,S,flows,lambda){
     # Final step - combine the two matrices
     colnames(prcopr)<-gsub("production","coprd",colnames(prmain))
     prnew<-cbind(prmain,prcopr)
-    return(list(P=prenew))
+    return(list(P=prnew))
 }
 
 nutflowanalysi<-function(E,S,flows){
     P<-E$P
+    #In case system separation has been done
+    S$nproc<-ncol(P)
     nproc<-S$nproc
+    
     nprod<-S$nprod
     origin<-flows$origin
     resources<-S$resources
@@ -585,6 +597,10 @@ f_reffanalysis<-function(
             }else if(dolambda=="byvalue2"){
                 lambda<-allocationbyvalue2(E$P,S$nprod,S$nproc) 
             }
+            #QQ Is flows really needed to be done or can it be omitted?
+            E$P<-systemseparation(E,S,flows,lambda)
+            testnut<-nutflowanalysi(E,S,flows)
+            
             #print(lambda)
             flowmatrix<-f_flowmatrix(S$nproc,S$nprod,lambda,flows$origin,flows$target)
             #print(flowmatrix)
