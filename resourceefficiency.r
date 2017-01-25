@@ -41,7 +41,6 @@ fillrecycling<-function(E,S){
     P[nprod+length(resources),]<-P[nprod+length(resources),]-tempdiff
     return(P)
 }
-
 flowanalysis<-function(E,S){
     #E$P,S$nprod,S$recycled,S$goods,S$resources,S$losses
     #P,nprod,recycled,goods,resources,losses
@@ -85,6 +84,122 @@ flowanalysis<-function(E,S){
                 sumresources=sumresources,
                 nue=nue))
 }
+systemseparation<-function(E,S,flows,lambda){
+    P<-E$P
+    goods<-S$goods
+    products<-S$products
+    resources<-S$resources
+    losses<-S$losses
+    nprod<-S$nprod
+    nproc<-S$nproc
+    f<-E$f
+    sumlosses<-flows$sumlosses
+    sumresources<-flows$sumresources
+    
+    # Definition chainflows: Flows which are completely produced and absorbed 
+    #   in the supply chain whereby the consumption process is at 'higher level'
+    #   than the production process
+    chainflows<-(target>origin)
+    
+    # Definition recyclingflows: Flows which are completely produced and absorbed
+    #   in the supply chain whereby the consumption process is at 'lower level'
+    #   than the production process
+    recyflows<-(target<origin)&(target!=0)
+    
+    # Definition residualflows: Flows which are completely produced and absorbed
+    #   in the supply chain whereby production and consumption occurs in the 
+    #   same process
+    resiflows<-(target==origin)
+    
+    # Defintion mainflows: a demand is quantified
+    mainflows<-c(f>0,rep(FALSE,nprod-length(f)))
+    
+    # Definition exportflows: Flows which leave the current supply chain (co-products)
+    expoflows<-origin!=0 & target==0 & !mainflow
+    
+    # Distribute burden over the goods
+    em<-t(t(lambda)*sumlosses)
+    emmain<-em*(mainflows|chainflows)
+    emcopr<-em*(expoflows)
+    
+    prmain<-P[1:nprod,]*(mainflows|chainflows)
+    prmain[prmain<0]<-0
+    prcopr<-P[1:nprod,]*(expoflows)
+    #Do not consider recycling flows so far
+    inmain<-(prmain+emmain)
+    incopr<-(prcopr+emcopr)
+    inmain[inmain<0]<-0
+    incopr[incopr<0]<-0
+    
+    # Allocation factors based on input to processes
+    inallmain<-colSums(inmain)/colSums(inmain+incopr)
+    inallcopr<-colSums(incopr)/colSums(inmain+incopr)
+    # Allocate resources based on input shares
+    resmain<-sumresources*inallmain
+    rescopr<-sumresources*inallcopr
+
+    # Distribute recylcing flows between main and co-processes
+    # Problem: if recycling flows are considered as co-product and not as residuals
+    #          then system separation and application of the matrix-inversion 
+    #          approach leads potentially to problems.
+    # Therefore recycling flows HAVE to be considered as residuals and are
+    # split at production side acc to share of products
+    # and at input side acc to share of input (resources)
+    # (there are many alternatives solutions that could also be OK, 
+    # important is that the split can reproduce MFA for flow-allocation
+    # e.g. recycling flows could be split acc to allocation of burden at production side
+    # )
+    # ----> maybe this doesn't matter as the inversion is done only for the first rows?
+    recmaintarget<-t(t(P[1:nprod,]*recyflows)*inallmain)
+    reccoprtarget<-t(t(P[1:nprod,]*recyflows)*inallcopr)
+    recmaintarget[recmaintarget>0]<-0
+    reccoprtarget[reccoprtarget>0]<-0
+    
+    # Allocation shares based on production
+    # (necessarily these allocation shares will be equal to resource shares)
+    prallmain<-colSums(prmain)/colSums(prmain+prcopr)
+    prallcopr<-colSums(prcopr)/colSums(prmain+prcopr)
+    recmainorigin<-t(t(P[1:nprod,]*recyflows)*prallmain)
+    reccoprorigin<-t(t(P[1:nprod,]*recyflows)*prallcopr)
+    emmainorigin<-
+    recmainorigin[recmainorigin<0]<-0
+    reccoprorigin[reccoprorigin<0]<-0
+    
+    recmain<-recmaintarget+recmainorigin
+    reccopr<-reccoprtarget+reccoprorigin
+    #Distribute remaining emissions [if there was any attached to recycling flows]
+    emmain[recyflows]<-t(t(em[recyflows,])*prallmain)
+    emcopr[recyflows]<-t(t(em[recyflows,])*prallcopr)
+    
+    # Distribute chainflows
+    prmain[1:nproc,1:nproc]<-sapply(1:nproc,function(j) sapply(1:nproc,function(i) 
+        if(target[i]==j) {prmain[i,j]-prmain[i,origin[i]]*inallmain[j]}else{prmain[i,j]}))
+    prcopr[1:nproc,1:nproc]<-sapply(1:nproc,function(j) sapply(1:nproc,function(i) 
+        if(target[i]==j) {prcopr[i,j]-prmain[i,origin[i]]*inallcopr[j]}else{prcopr[i,j]}))
+    
+    # Re-constructing the Process matrices
+    prmain[recyflows,]<-recmain[recyflows,]
+    prcopr[recyflows,]<-reccopr[recyflows,]
+    
+    if(length(resources)==1){
+        prmain<-rbind(prmain,resmain)
+        rownames(prmain)[which(rownames(prmain)=="resmain")]<-resources
+        prcopr<-rbind(prcopr,rescopr)
+        rownames(prcopr)[which(rownames(prcopr)=="rescopr")]<-resources
+    }else{stop("More than one resource row - please adapt script")}
+    if(length(losses)==1){
+        prmain<-rbind(prmain,colSums(emmain))
+        rownames(prmain)[nrow(prmain)]<-losses
+        prcopr<-rbind(prcopr,colSums(emcopr))
+        rownames(prcopr)[nrow(prcopr)]<-losses
+        rownames(prcopr)[which(rownames(prcopr)=="rescopr")]<-resources
+    }else{stop("More than one resource row - please adapt script")}
+    
+    # Final step - combine the two matrices
+    colnames(prcopr)<-gsub("production","coprd",colnames(prmain))
+    prnew<-cbind(prmain,prcopr)
+    return(list(P=prenew))
+}
 
 nutflowanalysi<-function(E,S,flows){
     P<-E$P
@@ -114,8 +229,92 @@ nutflowanalysi<-function(E,S,flows){
     
     return(list(V=V,r=r,rintensity=rintensity,lcanue=lcanue))
 }
+f_recfatelambda<-function(E,S,flows,lambda,flowfin){
+    P<-E$P
+    chainflows<-flows$chainflows
+    nproc<-S$nproc
+    nprod<-S$nprod
+    
+    lam3<-lambda*(!(chainflows))
+    lam3<-t(t(lam3)/colSums(lam3))
+    
+    
+    #Calculate the destination of an input to process 1
+    #that is not recycled
+    
+    # Create a matrix that 'chain fractions', ie. the 
+    # share of process j (column) 
+    # that is arriving at process i (rows)
+    chainfractions<-matrix(0,ncol=nproc,nrow=nproc)
+    chainfractions[,]<-sapply(1:nproc,function(j) sapply(1:nproc,function(i) 
+        if(i==j){
+            1
+        }else if(j<i){
+            0
+        }else{
+            Reduce("*",colSums(lam3[1:nproc,1:nproc])[i:(j-1)])
+        }
+    ))
+    
+    
+#     chainfractions<-matrix(0,ncol=nproc,nrow=nproc)
+#     for(i in 1:1){
+#         for(j in 1:nproc){
+#             chainfractions[i,j]<-if(j>i){flowfin[i,j]}else{1}*flowfin[j,j]
+#             for(jstar in 1:(i-1)){
+#                 chainfractions[i,j]<-Reduce("*",)
+#             }
+#         }
+#     }
+    
+    
+    
+    
+    # Share per process which is exported
+    lamexport<-colSums(lam3[flows$exportflows[1:nprod],])
+    
+    # Fate of recycled input to processes
+    # The rows give the process into which the input occurs
+    # The columns give the process to which the input is distributed
+    recfate<-t(t(chainfractions)*lamexport)
+    return(recfate=recfate)
+}
 
-
+f_newnutflow<-function(E,S,flows,lambda){
+    P<-E$P
+    nproc<-S$nproc
+    nprod<-S$nprod
+    origin<-flows$origin
+    target<-flows$target
+    goods<-S$goods
+    losses<-S$losses
+    prows<-S$prows
+    sumlosses<-flows$sumlosses
+    
+    # Fill in input flows
+    #sel<-which(origin!=target&target!=0)
+    #A<-P[1:nprod,]*lambda
+    #for(i in 1:length(sel)){A[sel[i],target[sel[i]]]<--A[sel[i],origin[sel[i]]]}
+    A<-P[1:nprod,]
+    #Add to A the losses according to flow-allocation
+    lbyflow<-allocationbyflow(E,S,flows)
+    ladd<-t(t(lbyflow)*sumlosses)
+    #Substract now the losses according to current allocation
+    lsub<-t(t(lambda)*sumlosses)
+    A<-A+ladd-lsub
+    #Adjust recycling flows
+    for(i in 1:length(sel)){A[sel[i],target[sel[i]]]<--A[sel[i],origin[sel[i]]]}
+    
+    sel<-which(rownames(l2)%in%goods)
+    #print(apply(as.matrix(Aall[sel,][origin[sel]==3,]),2,sum))
+    #print(P[sel,][origin[sel]==3,,drop=FALSE])
+    V<-matrix(rep(0,nproc**2),ncol=nproc,nrow=nproc)
+    V<-t(sapply(1:nproc,function(x) apply(l2[sel,][origin[sel]==x,,drop=FALSE],2,sum)))
+    e<-as.vector(as.matrix(-P[prows%in%losses,]))
+    rintensity<-t(r)%*%ginv(V)
+    eintensity<-t(e)%*%ginv(V)
+    
+}
 
 allocationbyflow<-function(E,S,flows){
     #Re-scale factors so that their sum is 1
@@ -151,11 +350,6 @@ f_flowmatrix<-function(nproc,nrpod,lambda,origin,target,goods){
             sum(lambda[origin==i&target==0,])
         }
     ))
-    #sel<-which(rownames(lambda)%in%goods)
-    #print(apply(as.matrix(P[sel,][origin[sel]==3,]),2,sum))
-    #print(P[sel,][origin[sel]==3,,drop=FALSE])
-    #V<-matrix(rep(0,nproc**2),ncol=nproc,nrow=nproc)
-    #V<-t(sapply(1:nproc,function(x) apply(lambda[sel,][origin[sel]==x,,drop=FALSE],2,sum)))
     
     return(flowmatrix)
 }
@@ -402,9 +596,10 @@ f_reffanalysis<-function(
             #print(flowrec)
             chainfractions<-f_chainfraction(S$nproc,flowfin)
             
-            print("chainfractions")
-            print(chainfractions)
-            recfate<-f_recfate(S,flowrec,chainfractions)
+            #print("chainfractions")
+            #print(chainfractions)
+            recfateold<-f_recfate(S,flowrec,chainfractions)
+            recfate<-f_recfatelambda(E,S,flows,lambda,flowfin)
             print(recfate)
             burden<-calcburden(E,S,flows,lambda,recfate)
             curex<-list(stype=stype,etype=etype,dolambda=dolambda,
