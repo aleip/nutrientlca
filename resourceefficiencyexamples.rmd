@@ -1,0 +1,235 @@
+---
+title: "Comparing MFA and LCA approaches for the quantification of resource use efficiency for livestock supply chains"
+author: "Adrian Leip"
+date: "Thursday, January 22, 2017"
+output:
+  word_document:
+    fig_caption: yes
+    fig_width: 3
+  html_document: default
+---
+
+
+# Examples
+The following criteria should be met for a resource efficiency indicator
+
+```{r,echo=FALSE}
+source("supplychaindefs.r")
+# A. Process example 
+S<-supplychainsimple("default")
+E<-supplyvalues("aimable",S)
+cat("\nExample AIMABLE\n")
+dolambda<-"byvalue1"
+source("rue_analysis.r")
+
+refS<-S
+refs<-s
+refE<-E
+refburden<-burden
+refflows<-flows
+refnutflow<-nutflow
+
+noPprint<-0
+```
+
+## Products are better than recycling
+
+1.    A system which generates a certain share x1 of the main product(s) and another share y1 of outputs that are recycled is more efficient than a system which generates a smaller share x2<x1 of the main products and a larger share y2>y1 of products that are being recycled, given that x1+y1=x2+y2. 
+o	Everybody agrees
+
+### Implementation
+The process "Feed Production" gets 'less efficient' by producing 25 units of feed (instead of 50) and recycles 35 units back into the own process (instead of 10).
+
+```{r}
+sc1<-"norecycling"
+sc2<-"nofoodres"
+sc3<-"morefeedrecycling"
+sc4<-"largemanurerecycling"
+sc5<-"manureexport"
+sc6<-"nofeedrecycling"
+sc7<-"cropresexport"
+sc8<-"food2feed"
+a<-f_reffanalysis("default",
+                  c(rep("aimable",1),rep(sc1,1),rep(sc2,1),rep(sc3,1),
+                    rep(sc4,1),rep(sc5,1),rep(sc6,1),rep(sc7,1),rep(sc8,1)),
+                  c(rep(c("byflow"),9)))
+comparison(a,"nue")
+comparison(a,"P",which2 = 3)
+a<-f_reffanalysis("default",
+                  c(rep("aimable",3),rep(sc1,3),rep(sc3,3),rep(sc3,3),
+                    rep(sc4,3),rep(sc5,3),rep(sc6,3),rep(sc7,3),rep(sc8,3)),
+                  c(rep(c("byflow","byvalue1","byvalue2"),9)))
+comparison(a,"nue")
+a<-f_reffanalysis("default",c(rep("aimable",2)),c(rep(c(NA,"byflow"),1)))
+a<-f_reffanalysis("default",c(rep(sc1,2)),c(rep(c(NA,"byflow"),1)))
+comparison(a,"P",c(11))
+```
+
+### Results
+Both approaches reduce the NUEs for all processes and are thus conform with the criterion. 
+The MFA approach reacts much stronger, because ...
+
+
+## Recycling is better than waste
+
+2.    A system which generates a certain share x1 of the main product(s) and another share y1 of production that are recycled is more efficient than a system in which the share y1 is wasted.
+o	Everybody agrees
+
+### Implementation
+The process "Feed Production" gets 'less efficient' by wasting 10 units of feed instead of recycling it.
+
+```{r,echo=FALSE}
+E<-supplyvalues("nofeedrecycling",S)
+cat("\nExample waste crop residues instead of recycling\n")
+dolambda<-"byflow"
+noPprint<-0
+source("rue_analysis.r")
+source("rue_comparison.r")
+dolambda<-"byvalue1"
+noPprint<-1
+source("rue_analysis.r")
+source("rue_comparison.r")
+```
+
+### Results
+MFA approach reduces NUE as expected for all processes.
+
+**Explanation is not yet OK**LCA approach increases NUE only for feed production because recycled biomass is replaced by mineral fertilizer which has (in this example) no embedded burden.
+If the burden from fertilizer production would be accounted for, the NUE for products from feed production would decrease relativ to the current results.
+
+## Recycling to higher process level is better than recycling to lower level
+3.    A system recycles a share y1 'down one step' (e.g. from food to feed) is more efficient than a system which recycles a share y1 'down two steps' (e.g. from food to fertilizer), given all other flows are identical.
+o	Everybody agrees
+
+### Implementation
+Residues from food processing are used as feed instead as fertilizer.
+NUE of goods produced from other processes decreases.
+
+```{r,echo=FALSE}
+E<-supplyvalues("food2feed",S)
+cat("\nExample More Feed Recycling\n")
+dolambda<-"byflow"
+noPprint<-0
+source("rue_analysis.r")
+source("rue_comparison.r")
+dolambda<-"byvalue1"
+noPprint<-1
+source("rue_analysis.r")
+source("rue_comparison.r")
+```
+### Results
+
+
+## Consistency with allocated losses
+4.    A product which generated less losses per unit is more efficient than a product that generates more losses for the same unit, given all other flows are the same.
+o	Everybody agrees
+
+### Implementation
+LCIA calculates higher losses if the allocation to the main product (e.g. crops used as feed) versus a co-product (e.g. crop residues exported), in comparison to an analysis where the ratio of the allocation to main product vs. co-product is smaller.
+
+Tow allocations by value are tested, the second one assigning a higher value to crops used as feed in the supply chain as compared to the co-product of feed prouction.
+
+```{r,echo=FALSE}
+E<-supplyvalues("aimable",S)
+cat("\nExample More Feed Recycling\n")
+dolambda<-"byvalue1"
+source("rue_analysis.r")
+source("rue_comparison.r")
+noPprint<-1
+dolambda<-"byvalue2"
+source("rue_analysis.r")
+source("rue_comparison.r")
+```
+### Results
+MFA no change
+
+LCA the NUE of the co-product of processing increases as more burden is allocated to feed. As a consequence, the NUE of the processes following feed production decrease, with most of the effect carried to the final product.
+
+
+## Consistency NUE and surplus
+5.    The concepts of nutrient use efficiency and nutrient surplus are related concepts and values must be mutually consistent. 
+
+-	Aimable: at each stage but not necessarily for chain
+-	Claudia: NUE and N surplus are sides of the coin, but efficiency can be high and you apply more, than there is high efficiency
+-	Cargele: policymaker don't look at intermediate, look only at the output. For them NUE and N surplus must be consistent
+-	Stewart: for full life cycle becomes more difficult
+-	Guillaume: They use the same data but reflect different concepts. NUE (ratio) reflects performance of the system while the balance (difference), which can be a surplus or deficit, reflects the potential for losses or mining. The two should be improved in parallel.
+
+### Results
+As MFA is using different split of resources than the LCA approach, the difference between resource use and N in products cannot be used to estimate the burden, as it will be necessarily be different from the burden the products are associated with in the LCI Assessment.
+
+If resource use efficiency is calculated on the basis of MFA it must be made *very clear* that it is a _process analysis_, not an _analysis of products_, in contrast the LCA approach.
+
+
+## Differentiation of NUE within one process
+6.    It is possible that in a system with multiple products the products use nutrients with a different efficiency. For example, Walkers et al. (2016). Can Nitrogen Management maintain Grain Protein Content of wheat under elevated CO2? A FACE study. Showed that increase in vegetative growth took preference over increase in grain protein content. Thus nutrient use efficiency of straw was higher than the nutrient use efficiency of grain.
+o	Claudia and Cargele agree
+o	Cargele: it depends how the straw is used. If there are different uses you need to differentiate; straw is usually not the main product
+o	Aimable: nutrient accumulation is different, not efficiency. NUE for one stage is an old concept and should not be changed.
+o	Guillaume: And so what? How to reflect it in the indicator?
+o	Adrian: physiologically there are differences in nutrient uptake efficiency
+
+## Implementation
+Same as above: different allocation factors
+
+## Results
+The value of the allocation can be interpreted also as physical causes which lead to the fact that more losses are associated with one co-product versus another co-product. This can be interpreted as an 'internal' system separation.
+
+
+## NUE and energy
+7.    For two systems that have the same biomass flows of nutrient (fertilizer, products, co-products, recycling flows etc.) the one with a lower consumption of energy is more nutrient efficient than the one with a higher consumption of energy - unless the energy is produced with zero embodied N losses.
+o	Aimable: AGREED, AS THE EMBODIED N LOSSES ARE ADDED AS INPUT AND AS LOSSES FOR A MASS BALANCE. NUE FOR ENERGY IS 0
+
+## Recycling to other supply chain important?
+8.    For two systems that have the same biomass flows of nutrient (fertilizer, products, co-products, etc.) but in one system the recycling flows are recycled within the supply chain (e.g. as fertilizer for feed production) and in the other system the recycling flows are recycled to another supply chain (e.g. as fertilizer on a neighbour crop farm). Does one of the two systems have a higher nutrient use efficiency than the other?
+
+-	Aimable: THIS IS A ISSUE OF A SYSTEM BOUNDARY, SO FAR THE EXPORT IS CONSIDERED AS A CO-PRODUCT, THEREFORE THEIR EFFICIENCY WILL BE DIFFERENT.
+
+### Implementation
+No recycling of feed - instead higher fertilizer input.
+This is -so far- not associated with embedded burden.
+
+```{r,echo=FALSE}
+E<-supplyvalues("cropresexport",S)
+cat("\nNo recycling of feed\n")
+dolambda<-"byflow"
+noPprint<-0
+source("rue_analysis.r")
+source("rue_comparison.r")
+noPprint<-1
+dolambda<-"byvalue1"
+source("rue_analysis.r")
+source("rue_comparison.r")
+```
+
+### Results
+
+
+
+
+## Explanation for the LCA approach.
+
+The LCA approach takes builds on two principles
+
+1. The Nutrient Use Efficiency is inherently linked to the nutrient balance: 
+    N-input = N-in-goods + N-losses. 
+2. Direct burdens caused in the process are 
+
+In this example ther is an eternal N-input of `r sum(S$resourcesproducts)` kg N per 'cycle'. All of this is added to the first process (Feed production). Feed processing has two goods that leave the process: feed that goes to process 2 (`r E$P[1,1]` kg) and exported crop/feed of `r E$P[4,1]` kg. Thus `r #round(100*lambdamain[1,1],0)`% of burden (total N losses) is assigned to feed and `r #round(100*lambdamain[4,1],0)`%. Thus the `r E$P[11,1]` kg of losses are distributed accordingly. The second process generates three goods that are leaving the process: livestock product that is processed in process 3, exported livestock product (co-product) and a co-product that is recycled as fertilizer in process 1. The burden of `r E$P[11,2]` kg is distrubuted according to the flow strength of N. Process 3 generates the final product and recycles a small amount of N as fertilizer.
+```{r,echo=FALSE}
+print(describe(burden[[1]]))
+rintensity<-nutflow$rintensity
+V<-nutflow$V
+```
+
+
+# Discussion
+## Resource intensity
+The resource intensity gives the quantity of resources required to sustain the process chain to produce the main desired product *plus* all other goods that are produced in the process chain.
+
+Each process has a characteristic resource intensity for each of the *total goods* that is generic for all goods produced in the process chain. 
+
+For example, process 1 has a resource intensity of `r round(nutflow$rintensity[1],2)` which is obtained from the fact that it produces `r nutflow$V[1,1]` of goods (sum of feed and exported goods). At the same time, it consumes `r nutflow$V[2,1]` of goods produced in the second process and `r V[3,1]` of goods produced in the third process which are produced with the intensity `r round(rintensity[2],2)` and `r round(rintensity[3],2)`. Thus `r V[1,1]` * `r round(rintensity[1],2)` + `r V[2,1]` * `r round(rintensity[2],2)` + `r V[3,1]` * `r round(rintensity[3],2)` = `r round(V[1,1]*rintensity[1],2)` + `r round(V[2,1]*rintensity[2],2)` + `r round(V[3,1]*rintensity[3],2)` = `r round(V[1,1]*rintensity[1]+V[2,1]*rintensity[2]+V[3,1]*rintensity[3],2)`. A product that 'comes out' of the first process has the resource efficiency `r round(1/rintensity[1],3)`, a product that results from the second process (thus goes through the first two processes) has the resource efficiency `r round(1/rintensity[2],3)` and a process that goes through all three processes is produced with the efficency `r round(1/rintensity[3],3)`
+
+Overall, the process chain generates `r sum(apply(V,1,sum))` units of goods with a total input of `r flows$sumgoods[1]`, thus giving an overall efficiency of `r sum(apply(V,1,sum))/flows$sumgoods[1]`.
+

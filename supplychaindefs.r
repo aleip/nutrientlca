@@ -8,11 +8,13 @@ source("resourceefficiency.r")
 
 supplychainsimple<-function(type){
     if(type=="default"){
-        processes<-c("Feed production",
-                     "Livestock production",
-                     "Food production")
-        products<-c("feed","anim","food","feedco","animco","cropreso","cropresi",
-                    "waste","manure","foodres")
+        processes<-c("Feed",
+                     "Livestock",
+                     "Food")
+        products<-c("Feed","Livestock","Food",
+                    "Feed Copr","Livestock Copr",
+                    "Feed Residues","Feed Residues",
+                    "Waste","Livestock Recy","Food Recy")
         resources<-c("N fertilizer")
         losses<-c("N losses")
         interventions<-c(resources,losses)
@@ -21,8 +23,8 @@ supplychainsimple<-function(type){
         nprod<-length(products)
         
         #flagging recycled flows
-        recycled<-rep(0,length(products))
-        recycled[6:7]<-1
+        recycled<-c("Livestock Recy","Food Recy")
+        residues<-c("Feed Residues")
         
         waste<-c("waste")
         goods<-products[!products%in% waste]
@@ -33,6 +35,7 @@ supplychainsimple<-function(type){
                 products=products,
                 nprod=nprod,
                 resources=resources,
+                residues=residues,
                 losses=losses,
                 waste=waste,
                 goods=goods,
@@ -77,17 +80,17 @@ supplyvalues<-function(type,S){
     }
     
     if(sum(type%in%c("nofoodres","norecycling"))){
-        temp<-which(products=="foodres")
+        temp<-which(products=="Food Recy")
         # Reduce this to 0.01 and add it to final product
         A[3,3]<-A[3,3]+A[temp,3]
         A[temp,3]<-0
     }
     if(sum(type%in%c("manureexport","norecycling"))){
-        tempman<-which(products=="manure")
+        tempman<-which(products=="Livestock Recy")
         # Manure not recycled by exported (same value)
         # Substitution by mineral fertilizer 'automatic'
         #B[1,1]<-B[1,1]-A[tempman,2]
-        A[tempman,1]<-0
+        A[tempman,2]<-0
     }
     if(sum(type%in%c("morefeedrecycling"))){
         A[,1]<-c( 25,  0,   0,40,0,35,-35, 0,NA,NA)
@@ -146,9 +149,9 @@ allocationbyvalue2<-function(P,nprod,nproc){
     #Define relative 'value' (or whatever the basis for allocation is) over the goods produced in each process
     lam2<-matrix(0,ncol=nproc,nrow=nprod)
     # Main products 'double value' per unit of N
-    lam2[1,1]<-P[1,1]*2
-    lam2[2,2]<-P[2,2]*1.2
-    lam2[3,3]<-P[3,3]*1.2
+    lam2[1,1]<-P[1,1]*5
+    lam2[2,2]<-P[2,2]*5
+    lam2[3,3]<-P[3,3]*5
     # Exported products 'normal value
     lam2[4,1]<-P[4,1]*1
     lam2[5,2]<-P[5,2]*1
